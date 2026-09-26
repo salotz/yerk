@@ -1,0 +1,27 @@
+# PRJX host-local tree (salotz RFC 28)
+.local/
+
+# mise machine-local overrides / secrets
+.mise.local.toml
+mise.local.toml
+
+# Agent harness scratch in this checkout
+.agent-shell/
+
+# Ephemeral staging
+.tmp/
+
+# Go build / test / coverage
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Editor / OS noise
+*~
+\#*\#
+.\#*
+.DS_Store

@@ -1,0 +1,51 @@
+# Project tools and thin tasks. Usage docs: contributing/development.md.
+# Bootstrap host checks: .bootstrap/host-tool-check
+
+[tools]
+go = "1.27.1"
+
+[env]
+# Keep module/build caches inside the gitignored .local tree (writable in sandboxes).
+GOPATH = "{{config_root}}/.local/go"
+GOMODCACHE = "{{config_root}}/.local/go/pkg/mod"
+GOCACHE = "{{config_root}}/.local/go-cache"
+_.path = ["{{config_root}}/.local/bin"]
+
+# Inline: simple one-liners only. Longer logic → .tasks/
+
+[tasks.host-tool-check]
+description = "Check host tools from .bootstrap/host-tools.conf (no installs)"
+run = "sh .bootstrap/host-tool-check"
+
+[tasks.preload]
+description = "Download Go module deps after pins exist"
+run = "go mod download"
+
+[tasks.build]
+description = "Build yerk into .local/bin/yerk"
+run = "mkdir -p .local/bin && go build -o .local/bin/yerk ./cmd/yerk"
+
+[tasks.install]
+description = "Build and place yerk on the mise-managed PATH (.local/bin)"
+depends = ["build"]
+
+[tasks.test]
+description = "Run Go tests"
+run = "go test ./..."
+
+[tasks.check]
+description = "Format check + vet + tests"
+run = "go test ./... && go vet ./..."
+
+[tasks.fmt]
+description = "Apply gofmt to the tree"
+run = "gofmt -w $(find . -name '*.go' -not -path './.local/*')"
+
+[tasks.run]
+description = "Build then run yerk with passthrough args"
+depends = ["build"]
+run = ".local/bin/yerk"
+
+[tasks.clean]
+description = "Remove local build outputs (keeps module cache)"
+run = "rm -f .local/bin/yerk"
