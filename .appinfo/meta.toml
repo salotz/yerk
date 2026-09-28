@@ -1,0 +1,111 @@
+# Application info (salotz RFC 030) + environment registry (RFC 031).
+# Value types/policies: RFC 032. Name form: RFC 027 (YERK__ field style).
+#
+# Static usage context for humans, agents, and help tooling.
+# Runtime help surfaces come from internal/envvars (ADR 005) and MUST
+# relay the same type / policy / default / enum facts for tool + platform
+# names declared here. Keep both aligned when adding knobs.
+#
+# Do not put YERK__* under PRJX [project.env-vars] (.config/_project-meta.toml).
+
+version = "v0"
+
+[project]
+name = "yerk"
+summary = "Host multi-project manager (catalog, replicas, status)"
+uri = "https://github.com/salotz/yerk"
+
+[products.yerk-cli]
+name = "yerk CLI"
+command = "yerk"
+summary = "CLI for host catalog, workspace paths, presence/change status, and git materialize"
+description = """
+Keeps a host catalog of software projects, resolves replica paths under a
+workspace layout, reports presence and optional git change status, and
+clones default replicas. Speaks PRJX vocabulary; does not redefine PRJX.
+"""
+uri = "https://github.com/salotz/yerk"
+
+# Shared product env (single CLI product today).
+[env]
+env_prefix = "YERK"
+
+# --- tool-owned (YERK__) ---
+
+[env.vars.YERK__CONFIG_DIR]
+description = "Directory containing config.toml and catalog.toml by default."
+long_description = """
+When set, both default file paths are under this directory unless
+YERK__CONFIG or YERK__CATALOG overrides a file explicitly.
+"""
+type = "string"
+policy = "warn"
+default = { resolution = "Uses ${XDG_CONFIG_HOME}/yerk when XDG_CONFIG_HOME is set; otherwise ~/.config/yerk (via the platform user config directory)." }
+groups = ["config", "primary"]
+
+[env.vars.YERK__CONFIG]
+description = "Absolute path to the tool config file (config.toml)."
+long_description = "Tool/host behavior only (workspace root/style). Not the project catalog."
+type = "string"
+policy = "warn"
+default = { resolution = "Uses ${YERK__CONFIG_DIR}/config.toml when YERK__CONFIG_DIR is set; otherwise ${XDG_CONFIG_HOME}/yerk/config.toml (or ~/.config/yerk/config.toml)." }
+groups = ["config", "primary"]
+
+[env.vars.YERK__CATALOG]
+description = "Absolute path to the project catalog file (catalog.toml)."
+long_description = "Project registry only ([[projects]]). Missing file means empty catalog, not an error."
+type = "string"
+policy = "warn"
+default = { resolution = "Uses ${YERK__CONFIG_DIR}/catalog.toml when YERK__CONFIG_DIR is set; otherwise ${XDG_CONFIG_HOME}/yerk/catalog.toml (or ~/.config/yerk/catalog.toml)." }
+groups = ["config", "primary"]
+
+[env.vars.YERK__WORKSPACE_ROOT]
+description = "Override [workspace].root from tool config (checkout tree root)."
+long_description = "When unset, the value from config.toml [workspace].root is used. Empty config root leaves path math dependent on that setting."
+type = "string"
+policy = "warn"
+default = { resolution = "Unset: use [workspace].root from the loaded tool config (no separate built-in path)." }
+groups = ["workspace", "primary"]
+
+[env.vars.YERK__WORKSPACE_STYLE]
+description = "Override [workspace].style for replica path layout."
+long_description = """
+workspace-dir places replicas at <root>/<project>/<replica>.
+project-dir places replicas at <root>/<project>__<replica>.
+"""
+type = "enum"
+policy = "warn"
+default = { resolution = "Unset: use [workspace].style from tool config; if that is also empty, built-in default is workspace-dir." }
+values = ["workspace-dir", "project-dir"]
+groups = ["workspace", "primary"]
+
+# --- platform (external; used when resolving defaults or invoking git) ---
+
+[env.vars.XDG_CONFIG_HOME]
+description = "XDG base directory for user config; yerk appends /yerk when YERK__CONFIG_DIR is unset."
+external = true
+type = "string"
+policy = "warn"
+default = { resolution = "Platform / XDG Base Directory default when unset (commonly ~/.config)." }
+groups = ["platform", "config"]
+
+[env.vars.HOME]
+description = "User home; used by Go user config dir resolution when XDG_CONFIG_HOME is unset."
+external = true
+type = "string"
+policy = "warn"
+default = { resolution = "Platform home directory for the process user." }
+groups = ["platform"]
+
+[env.vars.PATH]
+description = "Process PATH; must include git for clone, status --git, and default-branch ls-remote."
+external = true
+type = "string"
+policy = "warn"
+default = { resolution = "Inherited process PATH." }
+groups = ["platform", "git"]
+
+# PRJX (RFC 28) owns PRJX_* / PRJX__* names. yerk may discover them later;
+# they are not declared here. See .prjx-root and .config/_project-meta.toml.
+# The CLI help registry (internal/envvars) may still mention them as external
+# discovery surface until that list is trimmed separately.
