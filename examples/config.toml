@@ -1,0 +1,7 @@
+# Example yerk tool / host configuration.
+# Copy to ~/.config/yerk/config.toml (or set YERK__CONFIG / YERK__CONFIG_DIR).
+
+[workspace]
+# Absolute path to the tree where replicas are placed.
+# root = "/home/you/projects"
+style = "workspace-dir" # or "project-dir"

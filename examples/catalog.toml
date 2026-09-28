@@ -1,0 +1,10 @@
+# Example yerk project catalog.
+# Copy to ~/.config/yerk/catalog.toml (or set YERK__CATALOG / YERK__CONFIG_DIR).
+
+[[projects]]
+name = "example"
+domain = "personal"
+remote = "git@github.com:example/example.git"
+tags = ["devel"]
+# default_replica = "main"   # optional; else remote HEAD / fallback main
+# path = "/absolute/override/replica/dir"

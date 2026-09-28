@@ -183,5 +183,5 @@ mise run build
 | `internal/project` | resolve / status |
 | `internal/version` | build stamps |
 | `.appinfo/meta.toml` | static product + env declarations (RFC 030/031) |
-| `fixtures/operator-host` | manual host test catalog |
+| `examples/` | portable config/catalog samples (ADR 007) |
 | `.local/` | caches, built binary (gitignored) |
