@@ -130,6 +130,9 @@ func TestProjectStatus(t *testing.T) {
 	if st.WorkspacePath != yerkWS {
 		t.Fatalf("workspace path: got %q want %q", st.WorkspacePath, yerkWS)
 	}
+	if st.WorkspacePresence != api.PresencePresent {
+		t.Fatalf("workspace presence: %s", st.WorkspacePresence)
+	}
 	if st.DefaultReplica == nil {
 		t.Fatal("expected default replica summary")
 	}
@@ -141,6 +144,44 @@ func TestProjectStatus(t *testing.T) {
 	}
 	if st.DefaultReplica.Change != "clean no-upstream" {
 		t.Fatalf("change: %q", st.DefaultReplica.Change)
+	}
+
+	list, err := r.ProjectStatuses(context.Background(), []config.Project{p}, project.StatusOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].DefaultReplica.Change != "-" {
+		t.Fatalf("presence-only list: %+v", list)
+	}
+}
+
+func TestReplicaStatusNamed(t *testing.T) {
+	root := t.TempDir()
+	domainRoot := filepath.Join(root, "personal")
+	feature := filepath.Join(domainRoot, "devel", "yerk", "feature")
+	if err := os.MkdirAll(filepath.Join(feature, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Config{
+		Workspace: config.Workspace{Style: "workspace-dir"},
+		Domains:   map[string]string{"personal": domainRoot},
+	}
+	r, err := project.NewResolver(cfg, fakeGit{
+		probe: gitcmd.ProbeResult{Dirty: true, Branch: "feature", NoUpstream: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := config.Project{Name: "yerk", Domain: "personal", Remote: "x", Path: "devel/yerk", DefaultReplica: "main"}
+	row, err := r.ReplicaStatus(context.Background(), p, "feature", project.StatusOptions{Git: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.Replica != "feature" || row.Path != feature {
+		t.Fatalf("%+v", row)
+	}
+	if row.Presence != api.PresencePresent || row.Change != "dirty no-upstream" {
+		t.Fatalf("%+v", row)
 	}
 }
 

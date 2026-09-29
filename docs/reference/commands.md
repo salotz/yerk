@@ -18,10 +18,10 @@ a second full flag dump.
 
 | Command | Role | Notes |
 | --- | --- | --- |
-| `status` | List projects + presence (+ optional change) | `--git`, `--tag` (select by declared catalog tag), `--network` |
+| `status` | Project or replica presence + change | `status [project [replica]]`; `--tag`; change on by default; `--presence-only`; `--network` |
 | `path` / `resolve` | Print workspace path, or replica path when distinguisher given | `path <proj>` → workspace; `path <proj> <replica>` → checkout |
 | `workspace ensure` | Create project workspace dirs only | names required, or `--all`; no replica leaf; no git |
-| `clone` | Materialize replica via git | progress names branch/ref |
+| `clone` | Materialize replica(s) via git | `clone <proj> [replica]` \| `--all` \| `--tag`; optional `--replica`; already-present → ok |
 | `config` | Tool config path / show | samples in `examples/` |
 | `catalog` | Catalog path / show (table + declared tags) | samples in `examples/`; ADR 010 |
 | `envvars` | Live env values for this process | docs: `yerk help envvars` |

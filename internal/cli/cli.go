@@ -15,6 +15,7 @@ import (
 	"github.com/salotz/yerk/internal/config"
 	"github.com/salotz/yerk/internal/envvars"
 	"github.com/salotz/yerk/internal/gitcmd"
+	"github.com/salotz/yerk/internal/presence"
 	"github.com/salotz/yerk/internal/project"
 	"github.com/salotz/yerk/internal/version"
 	"github.com/salotz/yerk/internal/workspace"
@@ -120,25 +121,45 @@ func newVersionCmd(streams IO) *cobra.Command {
 
 func newStatusCmd(streams IO) *cobra.Command {
 	var (
-		tagFilter string
-		withGit   bool
-		network   bool
+		tagFilter     string
+		presenceOnly  bool
+		network       bool
+		gitCompat     bool // deprecated alias; ignored when presence-only is set
 	)
 	cmd := &cobra.Command{
-		Use:   "status",
-		Short: "List catalog projects with presence (and optional change) status",
-		Long: withEnv(`List projects from catalog.toml with presence status for the default replica.
+		Use:   "status [project [replica]]",
+		Short: "Show project or replica presence and change status",
+		Long: withEnv(`Show status for catalog projects (default) or a single project/replica.
 
-Without --git: catalog + on-disk presence only (fast).
-With --git: also probe change flags (dirty, untracked, ahead/behind, …).
-With --network or --git: may use git ls-remote for default branch when
-default_replica is unset (otherwise catalog override or fallback "main").
+  yerk status                         → all projects (or --tag)
+  yerk status <project>               → one project
+  yerk status <project> <replica>     → one replica checkout
+  yerk status --tag <name>            → projects with declared tag
 
---tag selects only projects that list that declared catalog tag
-(must appear in the catalog's top-level tags list). Same selection model
+Project rows emphasize the project workspace path and summarize the default
+replica (presence/change). There is no REPLICA column on the project view;
+use status <project> <replica> for replica-scoped detail.
+
+Change probes run by default when a replica is present (dirty, untracked,
+ahead/behind, …). Pass --presence-only to skip git change probes (fast).
+
+With --network (or without --presence-only): may use git ls-remote for the
+default branch when default_replica is unset (otherwise catalog override or
+fallback "main"). With --presence-only and no --network, default branch is
+catalog override or "main" only (no ls-remote).
+
+--tag must appear in the catalog's top-level tags list. Same selection model
 will apply to other bulk ops (workspace ensure, clone, …).`, "status"),
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		Args: cobra.MaximumNArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if tagFilter != "" && len(args) > 0 {
+				return errors.New("status: pass --tag or project args, not both")
+			}
+			// Change on by default; --presence-only opts out. Legacy --git is
+			// accepted as a no-op so old scripts keep working.
+			withGit := !presenceOnly
+			_ = gitCompat
+
 			cfg, err := config.Load()
 			if err != nil {
 				return err
@@ -155,45 +176,70 @@ will apply to other bulk ops (workspace ensure, clone, …).`, "status"),
 				return nil
 			}
 
-			var projects []config.Project
-			if tagFilter != "" {
-				projects, err = cat.SelectByTag(tagFilter)
-				if err != nil {
-					return err
-				}
-			} else {
-				projects = append([]config.Project(nil), cat.Projects...)
-			}
-			if len(projects) == 0 {
-				fmt.Fprintf(streams.Out, "No projects matched tag %q.\n", tagFilter)
-				return nil
-			}
-
 			res, err := project.NewResolver(cfg, gitcmd.New())
 			if err != nil {
 				return err
 			}
-			// Default branch via network only when --git or --network.
+			// Network for default-branch discovery when probing change, or
+			// when the operator asked for --network explicitly.
 			useNet := network || withGit
-			rows, err := res.Status(cmd.Context(), projects, project.StatusOptions{
-				Git:     withGit,
-				Network: useNet,
-			})
+			opts := project.StatusOptions{Git: withGit, Network: useNet}
+
+			fmt.Fprintf(streams.Out, "workspace.style=%s\n", res.Layout.Style)
+
+			// Replica-scoped: status <project> <replica>
+			if len(args) == 2 {
+				p, ok := cat.Find(args[0])
+				if !ok {
+					return fmt.Errorf("project %q not in catalog", args[0])
+				}
+				row, err := res.ReplicaStatus(cmd.Context(), p, args[1], opts)
+				if err != nil {
+					return err
+				}
+				return printReplicaStatusTable(streams.Out, []api.ReplicaStatus{row}, withGit)
+			}
+
+			// Project list or single project
+			var projects []config.Project
+			switch {
+			case len(args) == 1:
+				p, ok := cat.Find(args[0])
+				if !ok {
+					return fmt.Errorf("project %q not in catalog", args[0])
+				}
+				projects = []config.Project{p}
+			case tagFilter != "":
+				projects, err = cat.SelectByTag(tagFilter)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(streams.Out, "filter.tag=%s\n", tagFilter)
+			default:
+				projects = append([]config.Project(nil), cat.Projects...)
+			}
+			if len(projects) == 0 {
+				if tagFilter != "" {
+					fmt.Fprintf(streams.Out, "No projects matched tag %q.\n", tagFilter)
+					return nil
+				}
+				fmt.Fprintln(streams.Out, "No projects in catalog.")
+				return nil
+			}
+
+			rows, err := res.ProjectStatuses(cmd.Context(), projects, opts)
 			if err != nil {
 				return err
 			}
-
-			fmt.Fprintf(streams.Out, "workspace.style=%s\n", res.Layout.Style)
-			if tagFilter != "" {
-				fmt.Fprintf(streams.Out, "filter.tag=%s\n", tagFilter)
-			}
-
-			return printReplicaStatusTable(streams.Out, rows, withGit)
+			return printProjectStatusTable(streams.Out, rows, withGit)
 		},
 	}
 	cmd.Flags().StringVar(&tagFilter, "tag", "", "Only projects with this declared catalog tag")
-	cmd.Flags().BoolVar(&withGit, "git", false, "Probe change status with git")
+	cmd.Flags().BoolVar(&presenceOnly, "presence-only", false, "Skip git change probes (presence only)")
 	cmd.Flags().BoolVar(&network, "network", false, "Resolve default branch via git ls-remote")
+	// Deprecated: change is on by default; kept so old invocations do not error.
+	cmd.Flags().BoolVar(&gitCompat, "git", false, "Deprecated: change probes are on by default (no-op)")
+	_ = cmd.Flags().MarkHidden("git")
 	return cmd
 }
 
@@ -323,19 +369,43 @@ See also: yerk path <project>, yerk clone <project>.`, "workspace ensure"),
 func newCloneCmd(streams IO) *cobra.Command {
 	var (
 		replicaFlag string
+		tagFilter   string
+		all         bool
 		network     bool
 	)
 	cmd := &cobra.Command{
-		Use:   "clone <project> [replica]",
-		Short: "Materialize a replica by cloning the project remote",
-		Long: withEnv(`Materialize a replica by cloning the project's remote into the resolved path.
+		Use:   "clone [project [replica]]",
+		Short: "Materialize replica(s) by cloning project remote(s)",
+		Long: withEnv(`Materialize replica checkouts by cloning catalog project remotes.
 
-Ensures parent directories, refuses non-empty destinations, then runs git clone
-(optionally --branch). When replica is omitted, resolves the remote default
-branch via git ls-remote --symref (then catalog default_replica / "main").
+Single project:
+  yerk clone <project> [replica]
+  yerk clone <project> --replica <name>
+
+Bulk (opt-in; mutually exclusive selectors):
+  yerk clone --all
+  yerk clone --tag <name>
+
+Bulk clones each selected project's default replica unless --replica is set
+(same distinguisher applied to every selected project). Bare clone with no
+names and no --all/--tag is an error.
+
+If the destination is already a usable git checkout (presence=present), clone
+skips git and reports that the replica is already present (still prints the
+path). A path that exists but is not a usable checkout (invalid) remains an
+error. Missing destinations are cloned as usual.
+
+Ensures parent directories, refuses non-empty non-checkout destinations, then
+runs git clone (optionally --branch). When replica is omitted per project,
+resolves the remote default branch via git ls-remote --symref (then catalog
+default_replica / "main").
+
+--tag must be a declared catalog tag. Unknown tags error. A declared tag
+with zero matching projects is an error for clone (empty mutate selection).
+--all with an empty catalog is an error.
 
 Requires git on PATH.`, "clone"),
-		Args: cobra.RangeArgs(1, 2),
+		Args: cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
 			if err != nil {
@@ -345,48 +415,143 @@ Requires git on PATH.`, "clone"),
 			if err != nil {
 				return err
 			}
-			p, ok := cat.Find(args[0])
-			if !ok {
-				return fmt.Errorf("project %q not in catalog", args[0])
-			}
-			if strings.TrimSpace(p.Remote) == "" {
-				return fmt.Errorf("project %q has empty remote", p.Name)
+			projects, sharedReplica, err := resolveCloneSelection(cat, args, all, tagFilter, replicaFlag)
+			if err != nil {
+				return err
 			}
 			git := gitcmd.New()
 			res, err := project.NewResolver(cfg, git)
 			if err != nil {
 				return err
 			}
-			replica := replicaFlag
-			if len(args) == 2 {
-				replica = args[1]
-			}
-			if replica == "" {
-				// Prefer network for clone so we hit the real default branch.
-				replica, err = res.DefaultReplicaName(cmd.Context(), p, true)
-				if err != nil {
-					return err
+			ctx := cmd.Context()
+			var firstErr error
+			okCount := 0
+			for _, p := range projects {
+				if err := cloneOne(ctx, streams, res, git, p, sharedReplica, network); err != nil {
+					fmt.Fprintf(streams.Err, "error: %v\n", err)
+					if firstErr == nil {
+						firstErr = err
+					}
+					continue
 				}
+				okCount++
 			}
-			path, err := res.ReplicaPath(p, replica)
-			if err != nil {
-				return err
+			if firstErr != nil {
+				if okCount > 0 {
+					return fmt.Errorf("clone: %d ok, with errors: %w", okCount, firstErr)
+				}
+				return firstErr
 			}
-			if err := workspace.EnsureParents(path); err != nil {
-				return err
-			}
-			fmt.Fprintf(streams.Err, "cloning %s branch %s from %s -> %s\n", p.Name, replica, p.Remote, path)
-			if err := git.Clone(cmd.Context(), p.Remote, path, replica); err != nil {
-				return err
-			}
-			fmt.Fprintln(streams.Out, path)
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&replicaFlag, "replica", "", "Replica distinguisher / branch (default: remote HEAD)")
+	cmd.Flags().StringVar(&replicaFlag, "replica", "", "Replica distinguisher / branch (default: per-project remote HEAD)")
+	cmd.Flags().StringVar(&tagFilter, "tag", "", "Clone every project with this declared catalog tag")
+	cmd.Flags().BoolVar(&all, "all", false, "Clone every project in the catalog")
 	cmd.Flags().BoolVar(&network, "network", true, "Resolve default branch via git ls-remote when replica omitted")
-	_ = network // clone always uses network for default branch when omitted
 	return cmd
+}
+
+// cloneOne materializes one project's replica. If the path is already a
+// usable checkout, it reports already-present and succeeds without git clone.
+func cloneOne(ctx context.Context, streams IO, res project.Resolver, git gitcmd.Runner, p config.Project, sharedReplica string, network bool) error {
+	if strings.TrimSpace(p.Remote) == "" {
+		return fmt.Errorf("project %q has empty remote", p.Name)
+	}
+	replica := sharedReplica
+	var err error
+	if replica == "" {
+		replica, err = res.DefaultReplicaName(ctx, p, network)
+		if err != nil {
+			return fmt.Errorf("%s: %w", p.Name, err)
+		}
+	}
+	path, err := res.ReplicaPath(p, replica)
+	if err != nil {
+		return fmt.Errorf("%s: %w", p.Name, err)
+	}
+
+	switch presence.Classify(path) {
+	case presence.Present:
+		fmt.Fprintf(streams.Err, "already present %s replica %s -> %s\n", p.Name, replica, path)
+		fmt.Fprintln(streams.Out, path)
+		return nil
+	case presence.Invalid:
+		return fmt.Errorf("%s: replica path exists but is not a usable git checkout: %s", p.Name, path)
+	}
+
+	if err := workspace.EnsureParents(path); err != nil {
+		return fmt.Errorf("%s: %w", p.Name, err)
+	}
+	fmt.Fprintf(streams.Err, "cloning %s branch %s from %s -> %s\n", p.Name, replica, p.Remote, path)
+	if err := git.Clone(ctx, p.Remote, path, replica); err != nil {
+		return fmt.Errorf("%s: %w", p.Name, err)
+	}
+	fmt.Fprintln(streams.Out, path)
+	return nil
+}
+
+// resolveCloneSelection picks projects and an optional shared replica name.
+// Modes (XOR): single/multi handled as single project+optional replica args,
+// --all, or --tag. Mutate empty selection is an error.
+func resolveCloneSelection(cat config.Catalog, args []string, all bool, tag, replicaFlag string) ([]config.Project, string, error) {
+	replicaFlag = strings.TrimSpace(replicaFlag)
+	tag = strings.TrimSpace(tag)
+	nSel := 0
+	if all {
+		nSel++
+	}
+	if tag != "" {
+		nSel++
+	}
+	if len(args) > 0 {
+		nSel++
+	}
+	if nSel > 1 {
+		return nil, "", errors.New("clone: pass project args, --all, or --tag, not a combination")
+	}
+	if nSel == 0 {
+		return nil, "", errors.New("clone: name a project, or pass --all or --tag")
+	}
+
+	if all {
+		projects, err := selectProjects(cat, nil, true)
+		if err != nil {
+			return nil, "", err
+		}
+		return projects, replicaFlag, nil
+	}
+	if tag != "" {
+		projects, err := cat.SelectByTag(tag)
+		if err != nil {
+			return nil, "", err
+		}
+		if len(projects) == 0 {
+			return nil, "", fmt.Errorf("clone: no projects matched tag %q", tag)
+		}
+		return projects, replicaFlag, nil
+	}
+
+	// Positional: clone <project> [replica]
+	if len(args) == 0 {
+		return nil, "", errors.New("clone: name a project, or pass --all or --tag")
+	}
+	if len(args) > 2 {
+		return nil, "", errors.New("clone: too many arguments (use --all or --tag for bulk)")
+	}
+	p, ok := cat.Find(args[0])
+	if !ok {
+		return nil, "", fmt.Errorf("project %q not in catalog", args[0])
+	}
+	replica := replicaFlag
+	if len(args) == 2 {
+		if replicaFlag != "" && replicaFlag != args[1] {
+			return nil, "", errors.New("clone: pass replica as argument or --replica, not both with different values")
+		}
+		replica = args[1]
+	}
+	return []config.Project{p}, replica, nil
 }
 
 func newConfigCmd(streams IO) *cobra.Command {
@@ -564,22 +729,58 @@ func selectProjects(cat config.Catalog, names []string, all bool) ([]config.Proj
 	return out, nil
 }
 
-// printReplicaStatusTable writes the human default-replica status table.
-// P6 will add a project-scoped table; resources stay api.ReplicaStatus.
+// printProjectStatusTable writes the human project-scoped status table.
+// PATH is the project workspace; PRESENCE/CHANGE summarize the default replica.
+func printProjectStatusTable(w io.Writer, rows []api.ProjectStatus, withGit bool) error {
+	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	if withGit {
+		fmt.Fprintf(tw, "NAME\tDOMAIN\tPRESENCE\tCHANGE\tPATH\n")
+		for _, row := range rows {
+			pres, change := projectReplicaCols(row)
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
+				row.Name, dash(row.Domain), pres, change, row.WorkspacePath)
+		}
+	} else {
+		fmt.Fprintf(tw, "NAME\tDOMAIN\tPRESENCE\tPATH\n")
+		for _, row := range rows {
+			pres, _ := projectReplicaCols(row)
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
+				row.Name, dash(row.Domain), pres, row.WorkspacePath)
+		}
+	}
+	return tw.Flush()
+}
+
+func projectReplicaCols(row api.ProjectStatus) (presence, change string) {
+	if row.DefaultReplica == nil {
+		return "-", "-"
+	}
+	pres := string(row.DefaultReplica.Presence)
+	if pres == "" {
+		pres = "-"
+	}
+	change = row.DefaultReplica.Change
+	if change == "" {
+		change = "-"
+	}
+	return pres, change
+}
+
+// printReplicaStatusTable writes a replica-scoped status table.
 func printReplicaStatusTable(w io.Writer, rows []api.ReplicaStatus, withGit bool) error {
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	if withGit {
-		fmt.Fprintf(tw, "NAME\tDOMAIN\tREPLICA\tPRESENCE\tCHANGE\tBRANCH\tPATH\n")
+		fmt.Fprintf(tw, "PROJECT\tREPLICA\tDOMAIN\tPRESENCE\tCHANGE\tBRANCH\tPATH\n")
 		for _, row := range rows {
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				row.Project, dash(row.Domain), row.Replica, row.Presence,
-				row.Change, row.Branch, row.Path)
+				row.Project, row.Replica, dash(row.Domain), row.Presence,
+				dash(row.Change), dash(row.Branch), row.Path)
 		}
 	} else {
-		fmt.Fprintf(tw, "NAME\tDOMAIN\tREPLICA\tPRESENCE\tPATH\n")
+		fmt.Fprintf(tw, "PROJECT\tREPLICA\tDOMAIN\tPRESENCE\tPATH\n")
 		for _, row := range rows {
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
-				row.Project, dash(row.Domain), row.Replica, row.Presence, row.Path)
+				row.Project, row.Replica, dash(row.Domain), row.Presence, row.Path)
 		}
 	}
 	return tw.Flush()

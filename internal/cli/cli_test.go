@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -74,7 +75,9 @@ path = "devel/missing-one"
 
 	var out bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &out}
-	if err := cli.Execute(context.Background(), streams, []string{"status"}); err != nil {
+	// Default status is project-scoped; --presence-only avoids git probe noise
+	// when fixtures are not full git repos (only .git dir marker).
+	if err := cli.Execute(context.Background(), streams, []string{"status", "--presence-only"}); err != nil {
 		t.Fatal(err)
 	}
 	s := out.String()
@@ -84,8 +87,50 @@ path = "devel/missing-one"
 	if !strings.Contains(s, "missing-one") || !strings.Contains(s, "missing") {
 		t.Fatalf("status missing: %s", s)
 	}
-	if !strings.Contains(s, yerkReplica) {
-		t.Fatalf("status should show replica path %s\n%s", yerkReplica, s)
+	if !strings.Contains(s, yerkWS) {
+		t.Fatalf("status should show project workspace path %s\n%s", yerkWS, s)
+	}
+	// Project view: no REPLICA column; PATH is workspace.
+	if strings.Contains(s, "REPLICA") {
+		t.Fatalf("project status must not include REPLICA column\n%s", s)
+	}
+	if !strings.Contains(s, "NAME") || !strings.Contains(s, "PRESENCE") || !strings.Contains(s, "PATH") {
+		t.Fatalf("expected project table headers\n%s", s)
+	}
+	if strings.Contains(s, yerkReplica) && !strings.Contains(s, yerkWS) {
+		t.Fatalf("unexpected: replica path without workspace\n%s", s)
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"status", "yerk", "--presence-only"}); err != nil {
+		t.Fatal(err)
+	}
+	sOne := out.String()
+	if !strings.Contains(sOne, "yerk") || !strings.Contains(sOne, yerkWS) {
+		t.Fatalf("status one project: %s", sOne)
+	}
+	if strings.Contains(sOne, "missing-one") {
+		t.Fatalf("single project should not list others\n%s", sOne)
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"status", "yerk", "main", "--presence-only"}); err != nil {
+		t.Fatal(err)
+	}
+	sRep := out.String()
+	if !strings.Contains(sRep, "yerk") || !strings.Contains(sRep, "main") {
+		t.Fatalf("status replica: %s", sRep)
+	}
+	if !strings.Contains(sRep, yerkReplica) {
+		t.Fatalf("replica status should show checkout path %s\n%s", yerkReplica, sRep)
+	}
+	if !strings.Contains(sRep, "REPLICA") {
+		t.Fatalf("replica status should include REPLICA column\n%s", sRep)
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"status", "nope"}); err == nil {
+		t.Fatal("status unknown project should error")
 	}
 
 	out.Reset()
@@ -213,7 +258,7 @@ tags = ["work"]
 
 	var out bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &out}
-	if err := cli.Execute(context.Background(), streams, []string{"status", "--tag", "devel"}); err != nil {
+	if err := cli.Execute(context.Background(), streams, []string{"status", "--tag", "devel", "--presence-only"}); err != nil {
 		t.Fatal(err)
 	}
 	s := out.String()
@@ -223,12 +268,15 @@ tags = ["work"]
 	if !strings.Contains(s, "yerk") || !strings.Contains(s, "present") {
 		t.Fatalf("expected yerk row\n%s", s)
 	}
+	if !strings.Contains(s, yerkWS) {
+		t.Fatalf("expected workspace path in project view\n%s", s)
+	}
 	if strings.Contains(s, "office") {
 		t.Fatalf("office should be filtered out\n%s", s)
 	}
 
 	out.Reset()
-	if err := cli.Execute(context.Background(), streams, []string{"status", "--tag", "work"}); err != nil {
+	if err := cli.Execute(context.Background(), streams, []string{"status", "--tag", "work", "--presence-only"}); err != nil {
 		t.Fatal(err)
 	}
 	s = out.String()
@@ -237,6 +285,11 @@ tags = ["work"]
 	}
 	if strings.Contains(s, "yerk") {
 		t.Fatalf("yerk should be filtered out for work\n%s", s)
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"status", "--tag", "devel", "yerk"}); err == nil {
+		t.Fatal("status --tag with project args should error")
 	}
 }
 
@@ -402,3 +455,357 @@ default_replica = "main"
 	}
 }
 
+func TestCloneSelectionErrors(t *testing.T) {
+	dir := t.TempDir()
+	cat := []byte(`
+tags = ["devel", "work"]
+
+[[projects]]
+name = "yerk"
+remote = "git@example.com:salotz/yerk.git"
+path = "/tmp/yerk"
+tags = ["devel"]
+`)
+	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("YERK__CONFIG_DIR", dir)
+	t.Setenv("YERK__CONFIG", "")
+	t.Setenv("YERK__CATALOG", "")
+
+	var out bytes.Buffer
+	streams := cli.IO{Out: &out, Err: &out}
+
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"bare", []string{"clone"}, "name a project"},
+		{"all+name", []string{"clone", "--all", "yerk"}, "not a combination"},
+		{"tag+name", []string{"clone", "--tag", "devel", "yerk"}, "not a combination"},
+		{"all+tag", []string{"clone", "--all", "--tag", "devel"}, "not a combination"},
+		{"unknown-tag", []string{"clone", "--tag", "nope"}, "unknown tag"},
+		{"empty-tag", []string{"clone", "--tag", "work"}, "no projects matched tag"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := cli.Execute(context.Background(), streams, tc.args)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestCloneAllEmptyCatalog(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("YERK__CONFIG_DIR", dir)
+	t.Setenv("YERK__CONFIG", "")
+	t.Setenv("YERK__CATALOG", "")
+	var out bytes.Buffer
+	streams := cli.IO{Out: &out, Err: &out}
+	err := cli.Execute(context.Background(), streams, []string{"clone", "--all"})
+	if err == nil {
+		t.Fatal("expected empty catalog error")
+	}
+	if !strings.Contains(err.Error(), "empty") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestCloneBulkTagAndAll(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	domainRoot := filepath.Join(dir, "personal")
+	// Two bare repos as remotes.
+	remoteA := filepath.Join(dir, "remotes", "a.git")
+	remoteB := filepath.Join(dir, "remotes", "b.git")
+	initFileRemote(t, remoteA)
+	initFileRemote(t, remoteB)
+
+	cfg := []byte(`[workspace]
+style = "workspace-dir"
+
+[domains]
+personal = "` + domainRoot + `"
+`)
+	cat := []byte(`
+tags = ["devel", "work"]
+
+[[projects]]
+name = "alpha"
+domain = "personal"
+remote = "` + remoteA + `"
+default_replica = "main"
+path = "devel/alpha"
+tags = ["devel"]
+
+[[projects]]
+name = "beta"
+domain = "personal"
+remote = "` + remoteB + `"
+default_replica = "main"
+path = "devel/beta"
+tags = ["work"]
+`)
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), cfg, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("YERK__CONFIG_DIR", dir)
+	t.Setenv("YERK__CONFIG", "")
+	t.Setenv("YERK__CATALOG", "")
+	t.Setenv("YERK__WORKSPACE_STYLE", "")
+
+	var out, errBuf bytes.Buffer
+	streams := cli.IO{Out: &out, Err: &errBuf}
+
+	if err := cli.Execute(context.Background(), streams, []string{"clone", "--tag", "devel"}); err != nil {
+		t.Fatalf("clone --tag: %v\nerr=%s\nout=%s", err, errBuf.String(), out.String())
+	}
+	alphaPath := filepath.Join(domainRoot, "devel", "alpha", "main")
+	if strings.TrimSpace(out.String()) != alphaPath {
+		t.Fatalf("clone --tag out=%q want %q", out.String(), alphaPath)
+	}
+	if _, err := os.Stat(filepath.Join(alphaPath, ".git")); err != nil {
+		t.Fatalf("alpha checkout missing: %v", err)
+	}
+	betaPath := filepath.Join(domainRoot, "devel", "beta", "main")
+	if _, err := os.Stat(betaPath); !os.IsNotExist(err) {
+		t.Fatalf("beta should not be cloned by --tag devel")
+	}
+
+	out.Reset()
+	errBuf.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"clone", "--tag", "work"}); err != nil {
+		t.Fatalf("clone --tag work: %v\n%s", err, errBuf.String())
+	}
+	if !strings.Contains(out.String(), betaPath) {
+		t.Fatalf("expected beta path\n%s", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(betaPath, ".git")); err != nil {
+		t.Fatalf("beta checkout missing: %v", err)
+	}
+
+	// --all on already-cloned catalog should succeed (already present).
+	out.Reset()
+	errBuf.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"clone", "--all"}); err != nil {
+		t.Fatalf("clone --all when present should be ok: %v\n%s", err, errBuf.String())
+	}
+	sAll := out.String()
+	if !strings.Contains(sAll, alphaPath) || !strings.Contains(sAll, betaPath) {
+		t.Fatalf("expected both paths on already-present --all\n%s", sAll)
+	}
+	if !strings.Contains(errBuf.String(), "already present") {
+		t.Fatalf("expected already present messages on stderr\n%s", errBuf.String())
+	}
+}
+
+func TestCloneAlreadyPresentSingle(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	domainRoot := filepath.Join(dir, "personal")
+	remote := filepath.Join(dir, "remotes", "a.git")
+	initFileRemote(t, remote)
+
+	cfg := []byte(`[workspace]
+style = "workspace-dir"
+
+[domains]
+personal = "` + domainRoot + `"
+`)
+	cat := []byte(`
+tags = []
+
+[[projects]]
+name = "alpha"
+domain = "personal"
+remote = "` + remote + `"
+default_replica = "main"
+path = "devel/alpha"
+`)
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), cfg, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("YERK__CONFIG_DIR", dir)
+	t.Setenv("YERK__CONFIG", "")
+	t.Setenv("YERK__CATALOG", "")
+	t.Setenv("YERK__WORKSPACE_STYLE", "")
+
+	var out, errBuf bytes.Buffer
+	streams := cli.IO{Out: &out, Err: &errBuf}
+	if err := cli.Execute(context.Background(), streams, []string{"clone", "alpha"}); err != nil {
+		t.Fatalf("first clone: %v\n%s", err, errBuf.String())
+	}
+	path := filepath.Join(domainRoot, "devel", "alpha", "main")
+	out.Reset()
+	errBuf.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"clone", "alpha"}); err != nil {
+		t.Fatalf("second clone should succeed: %v\n%s", err, errBuf.String())
+	}
+	if strings.TrimSpace(out.String()) != path {
+		t.Fatalf("out=%q want %q", out.String(), path)
+	}
+	if !strings.Contains(errBuf.String(), "already present") {
+		t.Fatalf("stderr=%q", errBuf.String())
+	}
+	if strings.Contains(errBuf.String(), "cloning ") {
+		t.Fatalf("should not re-clone\n%s", errBuf.String())
+	}
+}
+
+func TestCloneInvalidPathErrors(t *testing.T) {
+	dir := t.TempDir()
+	domainRoot := filepath.Join(dir, "personal")
+	// Path exists as a plain directory (no .git) → invalid presence.
+	invalid := filepath.Join(domainRoot, "devel", "alpha", "main")
+	if err := os.MkdirAll(invalid, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(invalid, "not-git"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := []byte(`[workspace]
+style = "workspace-dir"
+
+[domains]
+personal = "` + domainRoot + `"
+`)
+	cat := []byte(`
+tags = []
+
+[[projects]]
+name = "alpha"
+domain = "personal"
+remote = "git@example.com:x/alpha.git"
+default_replica = "main"
+path = "devel/alpha"
+`)
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), cfg, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("YERK__CONFIG_DIR", dir)
+	t.Setenv("YERK__CONFIG", "")
+	t.Setenv("YERK__CATALOG", "")
+	t.Setenv("YERK__WORKSPACE_STYLE", "")
+
+	var out bytes.Buffer
+	streams := cli.IO{Out: &out, Err: &out}
+	err := cli.Execute(context.Background(), streams, []string{"clone", "alpha"})
+	if err == nil {
+		t.Fatal("expected error for invalid non-checkout path")
+	}
+	if !strings.Contains(err.Error(), "not a usable git checkout") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestCloneAllFresh(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	domainRoot := filepath.Join(dir, "personal")
+	remoteA := filepath.Join(dir, "remotes", "a.git")
+	remoteB := filepath.Join(dir, "remotes", "b.git")
+	initFileRemote(t, remoteA)
+	initFileRemote(t, remoteB)
+
+	cfg := []byte(`[workspace]
+style = "workspace-dir"
+
+[domains]
+personal = "` + domainRoot + `"
+`)
+	cat := []byte(`
+tags = []
+
+[[projects]]
+name = "alpha"
+domain = "personal"
+remote = "` + remoteA + `"
+default_replica = "main"
+path = "devel/alpha"
+
+[[projects]]
+name = "beta"
+domain = "personal"
+remote = "` + remoteB + `"
+default_replica = "main"
+path = "devel/beta"
+`)
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), cfg, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("YERK__CONFIG_DIR", dir)
+	t.Setenv("YERK__CONFIG", "")
+	t.Setenv("YERK__CATALOG", "")
+	t.Setenv("YERK__WORKSPACE_STYLE", "")
+
+	var out, errBuf bytes.Buffer
+	streams := cli.IO{Out: &out, Err: &errBuf}
+	if err := cli.Execute(context.Background(), streams, []string{"clone", "--all"}); err != nil {
+		t.Fatalf("clone --all: %v\n%s", err, errBuf.String())
+	}
+	s := out.String()
+	alphaPath := filepath.Join(domainRoot, "devel", "alpha", "main")
+	betaPath := filepath.Join(domainRoot, "devel", "beta", "main")
+	if !strings.Contains(s, alphaPath) || !strings.Contains(s, betaPath) {
+		t.Fatalf("clone --all paths:\n%s", s)
+	}
+	for _, p := range []string{alphaPath, betaPath} {
+		if _, err := os.Stat(filepath.Join(p, ".git")); err != nil {
+			t.Fatalf("%s missing .git: %v", p, err)
+		}
+	}
+}
+
+// initFileRemote creates a non-bare git repo usable as a local file remote.
+func initFileRemote(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=yerk-test",
+			"GIT_AUTHOR_EMAIL=yerk-test@example.com",
+			"GIT_COMMITTER_NAME=yerk-test",
+			"GIT_COMMITTER_EMAIL=yerk-test@example.com",
+		)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v (%s)", args, err, out)
+		}
+	}
+	run("init", "-b", "main")
+	if err := os.WriteFile(filepath.Join(dir, "README"), []byte("hi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", "README")
+	run("commit", "-m", "init")
+}

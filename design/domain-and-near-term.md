@@ -54,10 +54,10 @@ It speaks PRJX vocabulary; it does not redefine the PRJX spec.
 | Intent | Internal verb | Near-term CLI |
 | --- | --- | --- |
 | Add/update catalog row | register | hand-edit catalog (future `yerk register`) |
-| List / show states | status (read model) | `yerk status [project [replica]]` [`--tag`]; change on by default |
+| List / show states | status (read model) | `yerk status [project [replica]]` [`--tag`]; change on by default (`--presence-only` opt-out) |
 | Path math only | resolve | `yerk path` (alias: `resolve`); bare name → workspace, +replica → checkout |
 | Create project workspace dir | materialize workspace | `yerk workspace ensure <proj>…` or `--all` (later also `--tag`) |
-| Create replica via git | materialize replica | `yerk clone` (later also `--tag` bulk) |
+| Create replica via git | materialize replica | `yerk clone <proj> [replica]` \| `--all` \| `--tag` |
 | Read git state | probe change status | part of status (opt-out flag); not a separate default verb |
 | Universal read | get resource | later: `yerk get <kind> …` over API resources |
 | Sync | pull / push | later — **design semantics first** (no stub CLI) |
@@ -73,19 +73,20 @@ Commands that act on **many** projects share one selection model (ADR 010):
 | Selector | Meaning | Near-term |
 | --- | --- | --- |
 | (default / all catalog) | Every `[[projects]]` row | `yerk status` with no `--tag` |
-| `--tag <name>` | Projects that list declared tag `<name>` | `yerk status --tag` **done**; extend to ensure/clone/… |
+| `--tag <name>` | Projects that list declared tag `<name>` | `status --tag`; `clone --tag` |
 | project name args | Explicit subset | `workspace ensure <proj>…`, `clone <proj>` |
-| `--all` | Explicit full catalog (opt-in bulk mutate) | `workspace ensure --all` |
+| `--all` | Explicit full catalog (opt-in bulk mutate) | `workspace ensure --all`, `clone --all` |
 
 Rules:
 
 - `<name>` for `--tag` must appear in catalog root `tags` (unknown → error).
-- Declared tag with zero projects → empty match (not an error) for read ops;
-  mutate ops may still refuse empty selection where that is safer.
-- Names and `--all` remain mutually exclusive where both exist (ADR 009);
-  `--tag` vs names/`--all` exclusivity is defined when those commands gain `--tag`.
-- Implementation path: `Catalog.SelectByTag` (and name/`--all` helpers); status
-  already takes a pre-selected `[]Project` list.
+- Declared tag with zero projects → empty match (not an error) for **read** ops
+  (`status`); **mutate** ops (`clone`) refuse empty selection.
+- For mutate commands that support bulk: project args, `--all`, and `--tag` are
+  mutually exclusive (one selector). Names and `--all` also exclusive on
+  `workspace ensure` (ADR 009); ensure still lacks `--tag`.
+- Implementation path: `Catalog.SelectByTag` + `selectProjects` / clone
+  selection helper.
 
 ---
 
@@ -123,7 +124,7 @@ Column / docs label: **presence** (not “placement”).
 
 Orthogonal **flags** (combinatorial), not a single exclusive enum.
 
-**Local (MVP default with `--git`):**
+**Local (MVP; on by default unless `--presence-only`):**
 
 | Flag | Meaning |
 | --- | --- |
@@ -169,9 +170,9 @@ Display: space-separated flags; show `clean` only when no other local flags appl
 **Change status:**
 
 - **On by default** when probing is applicable (present checkout).
-- Opt-out flag (name TBD: e.g. `--no-git` / `--presence-only`) for fast
-  presence-only scans.
-- Historical `--git` as opt-in is inverted: change is default; disable to skip.
+- Opt-out: **`--presence-only`** skips git change probes (fast presence scan).
+- Historical `--git` as opt-in is inverted: change is default; `--git` is a
+  hidden no-op for old scripts.
 - `status --fetch` (fetch then probe) remains later, not required now.
 
 Near-term probes target the **default replica** when summarizing a project,

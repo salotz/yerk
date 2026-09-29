@@ -73,17 +73,16 @@ backends all share.
   - [ ] Storage/backends later (TOML files today → optional DB/etc. without
         rewriting command logic)
 
-### P6 — Status UX + change-on-disk (serial first) ⬅️ next product work
+### P6 — Status UX + change-on-disk (serial first) ✅
 
 Align status with **project** vs **replica** and make change status first-class.
 
 **Bugs / UX debt in current default list:**
 
-- [ ] Default `yerk status` path column should emphasize **project workspace**,
-      not only the default-replica checkout path.
-- [ ] Drop **REPLICA** column from the default **project** list view (replica
-      identity belongs on replica-scoped status; multi-replica lists are not
-      the default view).
+- [x] Default `yerk status` path column emphasizes **project workspace**
+      (`ProjectStatus.WorkspacePath`).
+- [x] Drop **REPLICA** column from the default **project** list view (replica
+      identity on replica-scoped status only).
 
 **Invocation model:**
 
@@ -96,21 +95,19 @@ Align status with **project** vs **replica** and make change status first-class.
 
 **Change status:**
 
-- [ ] **On by default** for status (disk/git change probe when presence allows).
-- [ ] Flag to **disable** change probing (name TBD: e.g. `--no-git` /
-      `--presence-only`) for fast presence-only scans.
-- [ ] Implement serial change collection first (correctness + resource shapes).
+- [x] **On by default** for status (disk/git change probe when presence allows).
+- [x] **`--presence-only`** disables change probing (fast presence-only scans).
+- [x] Serial change collection (`ProjectStatuses` / `ReplicaStatus`).
 - [ ] Then **P7 parallelize** probes.
 
-**Semantics notes (record in design; implement carefully):**
+**Semantics (implemented):**
 
-- Project status ≠ “one fake replica row”: workspace path + how we summarize
-  replicas (default replica only vs counts — decide in P6 with resources).
-- Replica status owns presence/change/branch/path for that distinguisher.
-- Multi-replica discovery under a workspace is **out of default project view**;
-  may be a later `get`/`status` mode.
+- Project rows: workspace path + default-replica presence/change summary
+  (not a fake replica row; no REPLICA column).
+- Replica rows: full path/presence/change/branch for that distinguisher.
+- Multi-replica discovery under a workspace remains out of default project view.
 
-### P7 — Parallel change probes
+### P7 — Parallel change probes ⬅️ next
 
 - [ ] Parallelize change probes (errgroup / semaphore) **after** P6 serial path
       and resource types are stable.
@@ -118,8 +115,9 @@ Align status with **project** vs **replica** and make change status first-class.
 
 ### P8 — Selection + bulk ops polish
 
-- [ ] Extend `--tag` to bulk mutate ops (`workspace ensure`, `clone`) via
-      `SelectByTag`; define XOR with names / `--all`.
+- [x] `yerk clone --all` / `yerk clone --tag` via `SelectByTag` + XOR with
+      names / `--all` (empty mutate selection errors).
+- [ ] Extend `--tag` to `workspace ensure` (same XOR model).
 - [ ] Optional: ADR note on git-subprocess vs go-git.
 
 ### P9 — Sync verbs (design before CLI)
@@ -142,12 +140,9 @@ tag bulk, dirty trees, upstream missing). **No CLI stubs** until decided.
 ## Suggested order (current)
 
 1. ~~**P5** resource types + package + ADR~~ ✅
-2. **P6** status UX (workspace path, drop replica col on project view, args
-   `status [project [replica]]`, change on by default / opt-out) — print
-   `ProjectStatus` for list/single project; `ReplicaStatus` for
-   `status <project> <replica>`.
+2. ~~**P6** status UX~~ ✅
 3. **P7** parallel probes.
-4. **P8** `--tag` on ensure/clone.
+4. **P8** finish `--tag` on `workspace ensure` (clone bulk done).
 5. Output formats / schema / `yerk get` as P5 follow-ons.
 6. **P9** push/pull design → implement.
 

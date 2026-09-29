@@ -92,7 +92,7 @@ default = { resolution = "Platform home directory for the process user." }
 groups = ["platform"]
 
 [env.vars.PATH]
-description = "Process PATH; must include git for clone, status --git, and default-branch ls-remote."
+description = "Process PATH; must include git for clone, status change probes, and default-branch ls-remote."
 external = true
 type = "string"
 policy = "warn"

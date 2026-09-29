@@ -64,11 +64,14 @@ shell activation.
   `path`/`resolve`, `workspace ensure`, `clone`, `config`, `catalog`,
   `envvars`, `version`. `workspace ensure` creates the project workspace
   directory only (not a replica leaf); requires project names or `--all`
-  (ADR 009). Catalog root `tags = […]` is a closed vocabulary; project
-  `tags` must be members (ADR 010). Catalog edits are hand-edit for now.
-  Plan spine: explicit API resources (P5, ADR 011, `internal/api`) →
-  status UX + change default (P6) → parallel probes (P7). `pull`/`push`
-  only after sync semantics (P9). See `.agents/plans/near-term.md`.
+  (ADR 009). `clone` supports single project or bulk `--all` / `--tag`
+  (XOR with names). Catalog root `tags = […]` is a closed vocabulary;
+  project `tags` must be members (ADR 010). Catalog edits are hand-edit
+  for now. Plan spine: explicit API resources (P5, ADR 011, `internal/api`)
+  → status UX + change default (P6) → parallel probes (P7). `status
+  [project [replica]]`; change on by default (`--presence-only`).
+  `pull`/`push` only after sync semantics (P9). See
+  `.agents/plans/near-term.md`.
 - **Examples vs host state (ADR 007):** portable samples live under
   `examples/` (e.g. `examples/config.toml`, `examples/catalog.toml`). Do
   **not** put `*.example.toml` at the repo root. Do **not** commit

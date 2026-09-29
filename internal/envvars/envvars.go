@@ -210,7 +210,7 @@ func All() []Var {
 		{
 			Name:     "PATH",
 			Scope:    ScopePlatform,
-			Summary:  "Process PATH; must include git for clone, status --git, and default-branch ls-remote",
+			Summary:  "Process PATH; must include git for clone, status change probes, and default-branch ls-remote",
 			Type:     TypeString,
 			Policy:   PolicyWarn,
 			Default:  "inherited process PATH",

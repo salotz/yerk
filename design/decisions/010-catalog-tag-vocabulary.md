@@ -48,11 +48,13 @@ surfaces the problem.
 
 Bulk selection by tag uses the closed vocabulary:
 
-- `yerk status --tag <name>` — first command; requires `<name>` declared.
-  Unknown tags error. Declared tag with zero projects is an empty match
-  (not an error). When filtering, status prints `filter.tag=<name>`.
-- Same `Catalog.SelectByTag` helper is the shared path for later bulk ops
-  (`workspace ensure`, `clone`, …).
+- `yerk status --tag <name>` — requires `<name>` declared. Unknown tags
+  error. Declared tag with zero projects is an empty match (not an error).
+  When filtering, status prints `filter.tag=<name>`.
+- `yerk clone --tag <name>` — same declared-tag rule; empty match is an
+  **error** (mutate). Mutually exclusive with project args and `--all`.
+- Same `Catalog.SelectByTag` helper is the shared path for bulk ops
+  (`workspace ensure --tag` still pending).
 
 `yerk catalog show` prints the declared vocabulary, then the project table
 (TAGS column still shows each project’s tags).

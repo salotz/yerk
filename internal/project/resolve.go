@@ -4,6 +4,7 @@ package project
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/salotz/yerk/internal/api"
@@ -62,13 +63,28 @@ func (r Resolver) ReplicaPath(p config.Project, replica string) (string, error) 
 
 // StatusOptions controls status collection.
 type StatusOptions struct {
-	Git     bool
-	Network bool // resolve default branch via ls-remote
+	// Git enables change probes when a replica is present (default for CLI).
+	Git bool
+	// Network resolves default branch via ls-remote when default_replica is unset.
+	Network bool
 }
 
-// Status builds ReplicaStatus resources for the given projects
-// (caller selects by name/tag/all). Each row is the default-replica view
-// used by today's status table; P6 will add project-scoped collection.
+// ProjectStatuses builds ProjectStatus resources for the given projects
+// (caller selects by name/tag/all). Serial collection (P7 may parallelize).
+func (r Resolver) ProjectStatuses(ctx context.Context, projects []config.Project, opts StatusOptions) ([]api.ProjectStatus, error) {
+	out := make([]api.ProjectStatus, 0, len(projects))
+	for _, p := range projects {
+		st, err := r.ProjectStatus(ctx, p, opts)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, st)
+	}
+	return out, nil
+}
+
+// Status builds default-replica ReplicaStatus resources for the given projects.
+// Prefer ProjectStatuses for the default human project list (P6).
 func (r Resolver) Status(ctx context.Context, projects []config.Project, opts StatusOptions) ([]api.ReplicaStatus, error) {
 	rows := make([]api.ReplicaStatus, 0, len(projects))
 	for _, p := range projects {
@@ -101,6 +117,7 @@ func (r Resolver) ProjectStatus(ctx context.Context, p config.Project, opts Stat
 	out.Name = p.Name
 	out.Domain = p.Domain
 	out.WorkspacePath = ws
+	out.WorkspacePresence = classifyWorkspaceDir(ws)
 	out.Tags = append([]string(nil), p.Tags...)
 	out.Remote = p.Remote
 	sum := rep.Summary()
@@ -143,4 +160,23 @@ func (r Resolver) replicaStatus(ctx context.Context, p config.Project, replica s
 		}
 	}
 	return row, nil
+}
+
+// classifyWorkspaceDir reports whether the project workspace directory exists.
+// Unlike replica presence, this is not a git-checkout classifier.
+func classifyWorkspaceDir(path string) api.Presence {
+	if path == "" {
+		return api.PresenceMissing
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return api.PresenceMissing
+		}
+		return api.PresenceInvalid
+	}
+	if !fi.IsDir() {
+		return api.PresenceInvalid
+	}
+	return api.PresencePresent
 }

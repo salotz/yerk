@@ -18,8 +18,15 @@ are separate, and how to read `yerk status` without mixing those jobs.
 ## Change (to expand)
 
 - Only meaningful when presence is `present`
-- Orthogonal flags from git probes (`--git`), not a single exclusive enum
+- Orthogonal flags from git probes (on by default; `--presence-only` skips)
 - Serial probes first; parallelization is a later hardening detail
+
+## Scopes
+
+| Invocation | View |
+| --- | --- |
+| `yerk status` / `yerk status <project>` | **ProjectStatus** — workspace path + default-replica summary |
+| `yerk status <project> <replica>` | **ReplicaStatus** — checkout path, presence, change, branch |
 
 ## Implementation note
 
