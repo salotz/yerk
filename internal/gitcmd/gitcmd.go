@@ -215,14 +215,17 @@ func (c *CLI) Probe(ctx context.Context, repoPath string) (ProbeResult, error) {
 	res.Dirty, res.Untracked = parsePorcelain(porcelain)
 	res.Clean = !res.Dirty && !res.Untracked
 
-	// Upstream sync: @{upstream} may fail.
-	_, err = c.run(ctx, repoPath, "rev-parse", "--abbrev-ref", "@{upstream}")
-	if err != nil {
+	// Sync comparison ref:
+	// 1) @{upstream} when branch tracking is set
+	// 2) else origin/<branch> when that remote-tracking ref exists (MVP fallback)
+	// 3) else no-upstream
+	compareRef, ok := c.syncCompareRef(ctx, repoPath, res.Branch)
+	if !ok {
 		res.NoUpstream = true
 		return res, nil
 	}
 
-	counts, err := c.run(ctx, repoPath, "rev-list", "--left-right", "--count", "HEAD...@{upstream}")
+	counts, err := c.run(ctx, repoPath, "rev-list", "--left-right", "--count", "HEAD..."+compareRef)
 	if err != nil {
 		res.SyncUnknown = true
 		return res, nil
@@ -245,6 +248,23 @@ func (c *CLI) Probe(ctx context.Context, repoPath string) (ProbeResult, error) {
 	res.Ahead = ahead
 	res.Behind = behind
 	return res, nil
+}
+
+// syncCompareRef picks the ref for ahead/behind. Prefer @{upstream}; fall back
+// to origin/<branch> when tracking is unset but that remote-tracking branch exists.
+func (c *CLI) syncCompareRef(ctx context.Context, repoPath, branch string) (string, bool) {
+	if _, err := c.run(ctx, repoPath, "rev-parse", "--abbrev-ref", "@{upstream}"); err == nil {
+		return "@{upstream}", true
+	}
+	if branch == "" || branch == "DETACHED" || branch == "HEAD" {
+		return "", false
+	}
+	// MVP: hard-code remote name "origin" (git clone default).
+	cand := "origin/" + branch
+	if _, err := c.run(ctx, repoPath, "rev-parse", "--verify", cand); err != nil {
+		return "", false
+	}
+	return cand, true
 }
 
 func parsePorcelain(out string) (dirty, untracked bool) {

@@ -132,18 +132,25 @@ Orthogonal **flags** (combinatorial), not a single exclusive enum.
 | `dirty` | Staged and/or unstaged modifications to tracked files. |
 | `untracked` | Untracked files present (separate from `dirty`). |
 
-**Sync (include in probe when cheap enough; may be `sync-unknown` without network):**
+**Sync (local remote-tracking refs; no fetch unless a future `--fetch`):**
 
 | Flag | Meaning |
 | --- | --- |
-| `ahead` | Local has commits not in upstream. |
-| `behind` | Upstream has commits not in local. |
-| `no-upstream` | No tracking branch. |
-| `sync-unknown` | Upstream query failed or skipped. |
+| `ahead:N` | Local has N commits not in the comparison ref. |
+| `behind:N` | Comparison ref has N commits not in local. |
+| `no-upstream` | No comparison ref (`@{upstream}` and `origin/<branch>` both missing). |
+| `sync-unknown` | Compare ref chosen but counts failed or skipped. |
+
+**Comparison ref (MVP):** `@{upstream}` if set, else `origin/<current-branch>`
+when that remote-tracking ref exists. Remote name hard-coded `origin` for now.
 
 **Probe-level:** omit change flags when presence ≠ `present`; `error` if git probe fails unexpectedly.
 
 Display: space-separated flags; show `clean` only when no other local flags apply.
+In-sync (ahead=0, behind=0) adds no sync token.
+
+**Follow-on:** `@{push}`, non-`origin` remotes, catalog remote name, triangular
+workflows — see [status-model.md](../docs/explanation/status-model.md).
 
 ### Status scopes (CLI)
 

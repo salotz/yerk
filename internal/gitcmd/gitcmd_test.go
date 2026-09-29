@@ -123,3 +123,70 @@ func TestParseFlagsDisplay(t *testing.T) {
 		t.Fatalf("%q", p.Flags())
 	}
 }
+
+func TestProbeOriginBranchFallbackAhead(t *testing.T) {
+	requireGit(t)
+	src := t.TempDir()
+	initRepo(t, src)
+
+	// Clone normally (sets upstream), then drop tracking to mimic
+	// agent-guidelines-style checkouts that still have origin/<branch>.
+	dest := filepath.Join(t.TempDir(), "work")
+	r := gitcmd.New()
+	ctx := context.Background()
+	if err := r.Clone(ctx, src, dest, "main"); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dest, "branch", "--unset-upstream")
+	// Local commit not on origin/main.
+	if err := os.WriteFile(filepath.Join(dest, "README"), []byte("local\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dest, "add", "README")
+	runGit(t, dest, "commit", "-m", "local")
+
+	res, err := r.Probe(ctx, dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.NoUpstream {
+		t.Fatalf("expected origin/main fallback, got NoUpstream: %+v flags=%s", res, res.Flags())
+	}
+	if res.Ahead != 1 || res.Behind != 0 {
+		t.Fatalf("want ahead=1 behind=0, got %+v flags=%s", res, res.Flags())
+	}
+	if got := res.Flags(); got != "clean ahead:1" {
+		t.Fatalf("flags %q", got)
+	}
+}
+
+func TestProbeOriginBranchFallbackMissing(t *testing.T) {
+	requireGit(t)
+	dir := t.TempDir()
+	initRepo(t, dir)
+	// No origin remote → still no-upstream.
+	r := gitcmd.New()
+	res, err := r.Probe(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.NoUpstream || res.Ahead != 0 {
+		t.Fatalf("%+v flags=%s", res, res.Flags())
+	}
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=yerk-test",
+		"GIT_AUTHOR_EMAIL=yerk-test@example.com",
+		"GIT_COMMITTER_NAME=yerk-test",
+		"GIT_COMMITTER_EMAIL=yerk-test@example.com",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v (%s)", args, err, out)
+	}
+}

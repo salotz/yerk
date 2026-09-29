@@ -57,6 +57,18 @@ presence scan.
 6. Read **presence** vs **change** without conflating them: change is only
    meaningful when presence is `present`.
 
+7. Read change flags as a **bag**, not a single enum. Common patterns:
+
+   | CHANGE | Rough meaning |
+   | --- | --- |
+   | `clean` | Worktree clean; if tracking and equal, no sync token |
+   | `clean ahead:2` | Clean worktree; **2 commits not on upstream** (unpushed vs tracking) |
+   | `clean no-upstream` | Clean worktree; **no branch upstream configured** (not proof that a remote has your commits) |
+   | `dirty untracked` | Local modifications + untracked files |
+
+   Full flag dictionary and gita comparison:
+   [Status model (explanation)](../explanation/status-model.md).
+
 ## See also
 
 - [Status model (explanation)](../explanation/status-model.md)
