@@ -65,9 +65,10 @@ shell activation.
   `envvars`, `version`. `workspace ensure` creates the project workspace
   directory only (not a replica leaf); requires project names or `--all`
   (ADR 009). Catalog root `tags = […]` is a closed vocabulary; project
-  `tags` must be members (ADR 010). Catalog edits are
-  hand-edit for now. Prefer parallel status (P4) before new surface area
-  (`register` / `pull` / `push` later).
+  `tags` must be members (ADR 010). Catalog edits are hand-edit for now.
+  Plan spine: explicit API resources (P5) → status UX + change default (P6)
+  → parallel probes (P7). `pull`/`push` only after sync semantics (P9).
+  See `.agents/plans/near-term.md`.
 - **Examples vs host state (ADR 007):** portable samples live under
   `examples/` (e.g. `examples/config.toml`, `examples/catalog.toml`). Do
   **not** put `*.example.toml` at the repo root. Do **not** commit

@@ -54,12 +54,13 @@ It speaks PRJX vocabulary; it does not redefine the PRJX spec.
 | Intent | Internal verb | Near-term CLI |
 | --- | --- | --- |
 | Add/update catalog row | register | hand-edit catalog (future `yerk register`) |
-| List projects + states | status (read model) | `yerk status` [`--tag`] |
+| List / show states | status (read model) | `yerk status [project [replica]]` [`--tag`]; change on by default |
 | Path math only | resolve | `yerk path` (alias: `resolve`); bare name → workspace, +replica → checkout |
 | Create project workspace dir | materialize workspace | `yerk workspace ensure <proj>…` or `--all` (later also `--tag`) |
 | Create replica via git | materialize replica | `yerk clone` (later also `--tag` bulk) |
-| Read git state | probe change status | `yerk status --git` |
-| Sync | pull / push | later (not in CLI until implemented; tag select expected) |
+| Read git state | probe change status | part of status (opt-out flag); not a separate default verb |
+| Universal read | get resource | later: `yerk get <kind> …` over API resources |
+| Sync | pull / push | later — **design semantics first** (no stub CLI) |
 | Apply host-local files | stage locals | later |
 
 Materialize **workspace** (`yerk workspace ensure`) and materialize **replica**
@@ -143,17 +144,55 @@ Orthogonal **flags** (combinatorial), not a single exclusive enum.
 
 Display: space-separated flags; show `clean` only when no other local flags apply.
 
-### Status command modes
+### Status scopes (CLI)
 
-| Mode | Behavior |
-| --- | --- |
-| `yerk status` | Catalog rows + **presence** for default replica (fast). |
-| `yerk status --git` | Also probe change flags. |
-| `yerk status --git --fetch` | Later: fetch then probe. Not near-term required. |
+| Invocation | Resource view | Notes |
+| --- | --- | --- |
+| `yerk status` | **Project** list (catalog / `--tag`) | Default human table. |
+| `yerk status <project>` | One **project** | |
+| `yerk status <project> <replica>` | One **replica** | Full presence + change for that checkout. |
+| `yerk status --tag <name>` | **Project** list filtered | Declared tag only (ADR 010). |
 
-Near-term status targets the **default replica** per project, not every child
-directory under a project. Multi-replica listing can follow once the model is
-implemented.
+**Project** status (default list / single project):
+
+- Emphasize **project workspace** path (not “only the default replica path”).
+- Do **not** show a **REPLICA** column on the default project view (replica
+  identity belongs on replica-scoped status). Multi-replica lists are not the
+  default view.
+- May summarize default-replica presence/change without pretending the row *is*
+  a replica.
+
+**Replica** status (`status <project> <replica>`):
+
+- Owns path, presence, change flags, branch, etc. for that distinguisher.
+
+**Change status:**
+
+- **On by default** when probing is applicable (present checkout).
+- Opt-out flag (name TBD: e.g. `--no-git` / `--presence-only`) for fast
+  presence-only scans.
+- Historical `--git` as opt-in is inverted: change is default; disable to skip.
+- `status --fetch` (fetch then probe) remains later, not required now.
+
+Near-term probes target the **default replica** when summarizing a project,
+not every child directory under the workspace. Multi-replica discovery can
+follow once resources/`get` are in place.
+
+### Explicit resources (model-driven)
+
+Pilot kubectl-style **API resources** as the shared model (even if ROI is
+partly ecosystem-pattern learning):
+
+- Package: `internal/api` (name TBD in ADR) — stable types, not TOML-only structs
+  and not CLI tabwriter rows.
+- Kinds include at least project registry objects, **ProjectStatus**,
+  **ReplicaStatus**; map loaders/adapters → resources → printers.
+- Enables later: `--output json|yaml|table`, JSON Schema / Go type docs,
+  universal `yerk get`, alternate backends (files today → DB later) without
+  rewriting command logic.
+
+See plan P5–P6 in `.agents/plans/near-term.md`. Push/pull stay blocked on a
+dedicated semantics design (P9) so project vs replica sync is not confusing.
 
 ---
 
@@ -224,18 +263,23 @@ personal = "~/tree/personal"
 
 In scope:
 
-1. **Static listing** from `catalog.toml` with **presence** (and optional **change**) status.
-2. **Tag vocabulary + bulk select** — closed catalog `tags`; `yerk status --tag` (ADR 010); same selector for other bulk ops as they grow.
-3. **Ensure** project workspace directories (`yerk workspace ensure <proj>…` or `--all`; not replica leaves; ADR 009).
-4. **Clone** default-branch replica into layout (`materialize replica`).
-5. **Resolve** paths for project / replica (`yerk path`).
-6. **Change status** via git probe (`yerk status --git`).
+1. **Status** — project vs replica scopes; workspace-oriented project view;
+   **change on by default** (opt-out); serial then parallel probes.
+2. **Tag vocabulary + bulk select** — closed catalog `tags`; `status --tag`
+   (ADR 010); extend selector to ensure/clone.
+3. **Ensure** project workspace directories (ADR 009).
+4. **Clone** default-branch replica.
+5. **Resolve** paths (`yerk path`).
+6. **Explicit API resources** pilot — typed model package, then json/yaml,
+   schemas, `yerk get` as follow-ons.
+7. **Push/pull design** before any sync CLI.
 
-Explicitly out of near-term:
+Explicitly out of near-term (or blocked):
 
 - Local config staging, FS watch daemon, port/resource tracking, mutagen, bulk
-  domain-tree mapping, monorepo presets, `register` mutation UX, push/pull.
-  Do not ship unimplemented CLI stubs; add commands when behavior exists.
+  domain-tree mapping, monorepo presets, `register` mutation UX.
+- **Shipping `pull`/`push`** before sync semantics are designed.
+- Do not ship unimplemented CLI stubs; add commands when behavior exists.
 
 ---
 

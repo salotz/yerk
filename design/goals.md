@@ -60,7 +60,9 @@ each replica on checkout from:
 ## MVP (first milestone)
 
 1. Config file: register projects by name, remote URI, destination, tags
-2. CLI: clone, push, pull, status
+2. CLI: clone, status (project/replica scopes), workspace ensure; path resolve
 3. Ship two workspace styles only:
    - workspace dir: `projects/<project>/<replica>`
    - project dir + replica suffix: `projects/<project>__<replica>`
+4. Explicit **resource types** (model-driven) so status/get/output formats share one model
+5. Push/pull only after clear project-vs-replica sync semantics (not stubbed early)
