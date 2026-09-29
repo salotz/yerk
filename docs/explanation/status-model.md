@@ -21,8 +21,15 @@ are separate, and how to read `yerk status` without mixing those jobs.
 - Orthogonal flags from git probes (`--git`), not a single exclusive enum
 - Serial probes first; parallelization is a later hardening detail
 
+## Implementation note
+
+Observed status is modeled as `internal/api` resources (`ReplicaStatus`,
+`ProjectStatus`) — not CLI-private row structs ([ADR 011](../../design/decisions/011-api-resources.md)).
+Human tables are one printer over those types.
+
 ## See also
 
 - [How to check status](../how-to/check-status.md)
 - [Commands reference](../reference/commands.md)
 - [design/domain-and-near-term.md](../../design/domain-and-near-term.md) (status section)
+- [ADR 011](../../design/decisions/011-api-resources.md)

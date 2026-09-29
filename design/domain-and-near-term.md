@@ -288,9 +288,10 @@ Explicitly out of near-term (or blocked):
 ```text
 CLI (cobra)
   → load config.toml + catalog.toml
+  → map / collect into internal/api resources
   → layout (pure path math; ensure dirs)
   → git adapter (default branch, clone, presence, change probe)
-  → print tables
+  → print resources (table today; json|yaml later)
 ```
 
 Principles:
@@ -299,11 +300,14 @@ Principles:
 2. Layout is pure (no git, no network).
 3. Only the git adapter talks to git.
 4. Materialize workspace ≠ materialize replica ≠ stage locals (later).
-5. Status is a read model: join(catalog, resolve, presence[, change]).
+5. Status is a read model: join(catalog, resolve, presence[, change]) → api
+   status resources.
 6. No daemon in near-term.
 7. Parallel git probes are **planned early** in the adapter API (e.g. worker
    pool) but can ship serial first; the domain model must not assume serial-only
    semantics.
+8. Product types live in `internal/api`; TOML load structs stay in
+   `internal/config`; CLI only selects and prints (ADR 011).
 
 ---
 

@@ -17,9 +17,13 @@ FQ name: `salotz.yerk`
 ## Product code
 
 - `cmd/yerk` — CLI main
-- `internal/cli` — cobra command tree
-- `internal/config` — XDG TOML catalog
+- `internal/cli` — cobra command tree (select + print)
+- `internal/api` — stable resource types (ADR 011)
+- `internal/config` — XDG TOML config + catalog load
+- `internal/project` — resolve / status collectors → api resources
 - `internal/workspace` — replica path styles (MVP)
+- `internal/gitcmd` / `internal/presence` — git adapter + presence
+- `internal/envvars` — env registry for help/live dumps
 - `internal/version` — ldflags-friendly identity
 
 ## Out of tree (operator notes)

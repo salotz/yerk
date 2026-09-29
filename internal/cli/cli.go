@@ -11,6 +11,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/salotz/yerk/internal/api"
 	"github.com/salotz/yerk/internal/config"
 	"github.com/salotz/yerk/internal/envvars"
 	"github.com/salotz/yerk/internal/gitcmd"
@@ -187,22 +188,7 @@ will apply to other bulk ops (workspace ensure, clone, …).`, "status"),
 				fmt.Fprintf(streams.Out, "filter.tag=%s\n", tagFilter)
 			}
 
-			tw := tabwriter.NewWriter(streams.Out, 0, 4, 2, ' ', 0)
-			if withGit {
-				fmt.Fprintf(tw, "NAME\tDOMAIN\tREPLICA\tPRESENCE\tCHANGE\tBRANCH\tPATH\n")
-				for _, row := range rows {
-					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-						row.Name, dash(row.Domain), row.Replica, row.Presence,
-						row.Change, row.Branch, row.Path)
-				}
-			} else {
-				fmt.Fprintf(tw, "NAME\tDOMAIN\tREPLICA\tPRESENCE\tPATH\n")
-				for _, row := range rows {
-					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
-						row.Name, dash(row.Domain), row.Replica, row.Presence, row.Path)
-				}
-			}
-			return tw.Flush()
+			return printReplicaStatusTable(streams.Out, rows, withGit)
 		},
 	}
 	cmd.Flags().StringVar(&tagFilter, "tag", "", "Only projects with this declared catalog tag")
@@ -576,6 +562,27 @@ func selectProjects(cat config.Catalog, names []string, all bool) ([]config.Proj
 		out = append(out, p)
 	}
 	return out, nil
+}
+
+// printReplicaStatusTable writes the human default-replica status table.
+// P6 will add a project-scoped table; resources stay api.ReplicaStatus.
+func printReplicaStatusTable(w io.Writer, rows []api.ReplicaStatus, withGit bool) error {
+	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	if withGit {
+		fmt.Fprintf(tw, "NAME\tDOMAIN\tREPLICA\tPRESENCE\tCHANGE\tBRANCH\tPATH\n")
+		for _, row := range rows {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				row.Project, dash(row.Domain), row.Replica, row.Presence,
+				row.Change, row.Branch, row.Path)
+		}
+	} else {
+		fmt.Fprintf(tw, "NAME\tDOMAIN\tREPLICA\tPRESENCE\tPATH\n")
+		for _, row := range rows {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
+				row.Project, dash(row.Domain), row.Replica, row.Presence, row.Path)
+		}
+	}
+	return tw.Flush()
 }
 
 func dash(s string) string {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/salotz/yerk/internal/api"
 	"github.com/salotz/yerk/internal/config"
 	"github.com/salotz/yerk/internal/gitcmd"
 	"github.com/salotz/yerk/internal/presence"
@@ -59,30 +60,19 @@ func (r Resolver) ReplicaPath(p config.Project, replica string) (string, error) 
 	return r.Layout.ReplicaDir(p, replica)
 }
 
-// Row is one status table row.
-type Row struct {
-	Name     string
-	Domain   string
-	Replica  string
-	Presence presence.Status
-	Change   string
-	Branch   string
-	Path     string
-	Tags     []string
-	Remote   string
-}
-
 // StatusOptions controls status collection.
 type StatusOptions struct {
 	Git     bool
 	Network bool // resolve default branch via ls-remote
 }
 
-// Status builds rows for the given projects (caller selects by name/tag/all).
-func (r Resolver) Status(ctx context.Context, projects []config.Project, opts StatusOptions) ([]Row, error) {
-	rows := make([]Row, 0, len(projects))
+// Status builds ReplicaStatus resources for the given projects
+// (caller selects by name/tag/all). Each row is the default-replica view
+// used by today's status table; P6 will add project-scoped collection.
+func (r Resolver) Status(ctx context.Context, projects []config.Project, opts StatusOptions) ([]api.ReplicaStatus, error) {
+	rows := make([]api.ReplicaStatus, 0, len(projects))
 	for _, p := range projects {
-		row, err := r.statusOne(ctx, p, opts)
+		row, err := r.replicaStatus(ctx, p, "", opts)
 		if err != nil {
 			return nil, err
 		}
@@ -91,27 +81,55 @@ func (r Resolver) Status(ctx context.Context, projects []config.Project, opts St
 	return rows, nil
 }
 
-func (r Resolver) statusOne(ctx context.Context, p config.Project, opts StatusOptions) (Row, error) {
-	replica, err := r.DefaultReplicaName(ctx, p, opts.Network)
+// ReplicaStatus builds one ReplicaStatus for project + replica distinguisher.
+// Empty replica uses DefaultReplicaName (honoring opts.Network).
+func (r Resolver) ReplicaStatus(ctx context.Context, p config.Project, replica string, opts StatusOptions) (api.ReplicaStatus, error) {
+	return r.replicaStatus(ctx, p, replica, opts)
+}
+
+// ProjectStatus builds a ProjectStatus with workspace path and default-replica summary.
+func (r Resolver) ProjectStatus(ctx context.Context, p config.Project, opts StatusOptions) (api.ProjectStatus, error) {
+	ws, err := r.WorkspacePath(p)
 	if err != nil {
-		return Row{}, err
+		return api.ProjectStatus{}, fmt.Errorf("%s: %w", p.Name, err)
+	}
+	rep, err := r.replicaStatus(ctx, p, "", opts)
+	if err != nil {
+		return api.ProjectStatus{}, err
+	}
+	out := api.NewProjectStatus()
+	out.Name = p.Name
+	out.Domain = p.Domain
+	out.WorkspacePath = ws
+	out.Tags = append([]string(nil), p.Tags...)
+	out.Remote = p.Remote
+	sum := rep.Summary()
+	out.DefaultReplica = &sum
+	return out, nil
+}
+
+func (r Resolver) replicaStatus(ctx context.Context, p config.Project, replica string, opts StatusOptions) (api.ReplicaStatus, error) {
+	var err error
+	if strings.TrimSpace(replica) == "" {
+		replica, err = r.DefaultReplicaName(ctx, p, opts.Network)
+		if err != nil {
+			return api.ReplicaStatus{}, err
+		}
 	}
 	path, err := r.ReplicaPath(p, replica)
 	if err != nil {
-		return Row{}, fmt.Errorf("%s: %w", p.Name, err)
+		return api.ReplicaStatus{}, fmt.Errorf("%s: %w", p.Name, err)
 	}
 	pres := presence.Classify(path)
-	row := Row{
-		Name:     p.Name,
-		Domain:   p.Domain,
-		Replica:  replica,
-		Presence: pres,
-		Change:   "-",
-		Branch:   "-",
-		Path:     path,
-		Tags:     p.Tags,
-		Remote:   p.Remote,
-	}
+	row := api.NewReplicaStatus()
+	row.Project = p.Name
+	row.Replica = replica
+	row.Domain = p.Domain
+	row.Path = path
+	row.Presence = api.PresenceFrom(pres)
+	row.Tags = append([]string(nil), p.Tags...)
+	row.Remote = p.Remote
+
 	if opts.Git && pres == presence.Present && r.Git != nil {
 		probe, err := r.Git.Probe(ctx, path)
 		if err != nil {

@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/salotz/yerk/internal/api"
 	"github.com/salotz/yerk/internal/config"
 	"github.com/salotz/yerk/internal/gitcmd"
-	"github.com/salotz/yerk/internal/presence"
 	"github.com/salotz/yerk/internal/project"
 )
 
@@ -69,13 +69,16 @@ func TestStatusPresenceOnly(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("rows %d", len(rows))
 	}
-	if rows[0].Presence != presence.Present || rows[0].Change != "-" {
+	if rows[0].Kind != api.KindReplicaStatus || rows[0].APIVersion != api.APIVersion {
+		t.Fatalf("type meta: %+v", rows[0])
+	}
+	if rows[0].Project != "yerk" || rows[0].Presence != api.PresencePresent || rows[0].Change != "-" {
 		t.Fatalf("yerk: %+v", rows[0])
 	}
 	if rows[0].Path != yerkReplica {
 		t.Fatalf("yerk path: got %q want %q", rows[0].Path, yerkReplica)
 	}
-	if rows[1].Presence != presence.Missing {
+	if rows[1].Project != "bimhaw" || rows[1].Presence != api.PresenceMissing {
 		t.Fatalf("bimhaw: %+v", rows[1])
 	}
 	wantMissing := filepath.Join(domainRoot, "devel", "bimhaw", "main")
@@ -89,6 +92,55 @@ func TestStatusPresenceOnly(t *testing.T) {
 	}
 	if rows[0].Change != "clean no-upstream" {
 		t.Fatalf("change %q", rows[0].Change)
+	}
+	if rows[0].Branch != "main" {
+		t.Fatalf("branch %q", rows[0].Branch)
+	}
+}
+
+func TestProjectStatus(t *testing.T) {
+	root := t.TempDir()
+	domainRoot := filepath.Join(root, "personal")
+	yerkWS := filepath.Join(domainRoot, "devel", "yerk")
+	yerkReplica := filepath.Join(yerkWS, "main")
+	if err := os.MkdirAll(filepath.Join(yerkReplica, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Config{
+		Workspace: config.Workspace{Style: "workspace-dir"},
+		Domains:   map[string]string{"personal": domainRoot},
+	}
+	r, err := project.NewResolver(cfg, fakeGit{
+		probe: gitcmd.ProbeResult{Clean: true, Branch: "main", NoUpstream: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := config.Project{
+		Name: "yerk", Domain: "personal", Remote: "x",
+		Path: "devel/yerk", DefaultReplica: "main", Tags: []string{"devel"},
+	}
+	st, err := r.ProjectStatus(context.Background(), p, project.StatusOptions{Git: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Kind != api.KindProjectStatus || st.Name != "yerk" {
+		t.Fatalf("project status: %+v", st)
+	}
+	if st.WorkspacePath != yerkWS {
+		t.Fatalf("workspace path: got %q want %q", st.WorkspacePath, yerkWS)
+	}
+	if st.DefaultReplica == nil {
+		t.Fatal("expected default replica summary")
+	}
+	if st.DefaultReplica.Name != "main" || st.DefaultReplica.Path != yerkReplica {
+		t.Fatalf("default replica: %+v", st.DefaultReplica)
+	}
+	if st.DefaultReplica.Presence != api.PresencePresent {
+		t.Fatalf("presence: %s", st.DefaultReplica.Presence)
+	}
+	if st.DefaultReplica.Change != "clean no-upstream" {
+		t.Fatalf("change: %q", st.DefaultReplica.Change)
 	}
 }
 

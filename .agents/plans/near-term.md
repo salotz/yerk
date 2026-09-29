@@ -141,10 +141,11 @@ tag bulk, dirty trees, upstream missing). **No CLI stubs** until decided.
 
 ## Suggested order (current)
 
-1. **P5** resource types + package + ADR (small vertical: define types, map
-   today’s status into them, still table print).
+1. ~~**P5** resource types + package + ADR~~ ✅
 2. **P6** status UX (workspace path, drop replica col on project view, args
-   `status [project [replica]]`, change on by default / opt-out).
+   `status [project [replica]]`, change on by default / opt-out) — print
+   `ProjectStatus` for list/single project; `ReplicaStatus` for
+   `status <project> <replica>`.
 3. **P7** parallel probes.
 4. **P8** `--tag` on ensure/clone.
 5. Output formats / schema / `yerk get` as P5 follow-ons.

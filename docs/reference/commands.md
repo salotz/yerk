@@ -35,3 +35,4 @@ a second full flag dump.
 - [ADR 005](../../design/decisions/005-cli-help-and-envvars.md)
 - [ADR 009](../../design/decisions/009-workspace-subcommand-and-ensure-scope.md)
 - [ADR 010](../../design/decisions/010-catalog-tag-vocabulary.md)
+- [ADR 011](../../design/decisions/011-api-resources.md)
