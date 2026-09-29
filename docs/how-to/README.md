@@ -16,4 +16,4 @@ Publication remains ad hoc plain Markdown
 | [Add a project to the catalog](./add-a-project.md) | Stub | Register a project by editing `catalog.toml` |
 | [Clone a default replica](./clone-a-replica.md) | Stub | Materialize a checkout with `yerk clone` |
 | [Check presence and change status](./check-status.md) | Stub | Use `yerk status` and `status --git` |
-| [Use a fixture config directory](./use-fixture-config.md) | Stub | Point `YERK__CONFIG_DIR` at a sample host tree |
+| [Use example config files](./use-example-config.md) | Stub | Copy `examples/` into a throwaway `YERK__CONFIG_DIR` |

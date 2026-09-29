@@ -1,15 +1,20 @@
-// Package config loads yerk tool configuration.
+// Package config loads yerk tool configuration and the project catalog.
 //
 // Layout (XDG):
 //
 //	$XDG_CONFIG_HOME/yerk/   (default ~/.config/yerk)
+//	  config.toml   — tool / host behavior (workspace style, domain roots)
+//	  catalog.toml  — project registry (portable relative paths under domains)
 //
 // Environment:
 //
-//	YERK__*  tool-specific knobs (double underscore namespace)
-//	PRJX__*  PRJX spec concerns (discovered, not owned here)
+//	YERK__CONFIG       explicit tool config file
+//	YERK__CONFIG_DIR   alternate config directory
+//	YERK__CATALOG      explicit catalog file
+//	YERK__WORKSPACE_STYLE  optional style overlay (workspace-dir | project-dir)
+//	PRJX__*            PRJX spec concerns (discovered, not owned here)
 //
-// A missing config file is not an error: Load returns Defaults().
+// Missing files are valid: empty catalog + tool defaults.
 package config
 
 import (
@@ -17,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -26,48 +32,89 @@ const (
 	AppName = "yerk"
 	// EnvPrefix is the tool env var prefix (YERK__).
 	EnvPrefix = "YERK__"
+	// ConfigFileName is the tool config basename.
+	ConfigFileName = "config.toml"
+	// CatalogFileName is the project catalog basename.
+	CatalogFileName = "catalog.toml"
 )
 
-// Config is the root tool configuration document.
+// Config is tool / host behavior (not the project list).
 type Config struct {
-	// Workspace describes how project replicas are laid out on the host.
-	Workspace Workspace `toml:"workspace"`
-	// Projects is the registered project catalog (MVP: name, remote, tags).
-	Projects []Project `toml:"projects"`
+	Workspace Workspace         `toml:"workspace"`
+	// Domains maps domain name → absolute host root for that domain.
+	// Catalog project paths that are relative join this root (ADR 008).
+	Domains map[string]string `toml:"domains"`
 }
 
-// Workspace controls checkout path conventions.
+// Workspace holds placement policy knobs.
+//
+// Each catalog project resolves to an absolute project-workspace directory
+// (domain root + relative path, or an absolute path). Style maps a replica
+// distinguisher under that workspace.
 type Workspace struct {
-	// Root is the host tree root for managed projects.
-	// Empty means "resolve later from PRJX / host layout".
-	Root string `toml:"root"`
-	// Style is the layout style for replicas.
-	// Supported MVP styles:
-	//   - "workspace-dir":   projects/<project>/<replica>
-	//   - "project-dir":     projects/<project>__<replica>
+	// Style how replicas sit relative to each project's workspace path:
+	//   - "workspace-dir": <workspace>/<replica>
+	//   - "project-dir":   <dir(workspace)>/<name>__<replica>
 	Style string `toml:"style"`
 }
 
-// Project is one registered software project.
-type Project struct {
-	// Name is the short project id used in CLI queries.
-	Name string `toml:"name"`
-	// Remote is the clone URI (git URL or path).
-	Remote string `toml:"remote"`
-	// Path is an optional fixed destination; empty uses Workspace rules.
-	Path string `toml:"path,omitempty"`
-	// Tags group projects for bulk operations (domain, topic, …).
-	Tags []string `toml:"tags,omitempty"`
-}
-
-// Defaults returns a usable empty configuration.
+// Defaults returns usable empty tool configuration.
 func Defaults() Config {
 	return Config{
 		Workspace: Workspace{
 			Style: "workspace-dir",
 		},
-		Projects: nil,
+		Domains: nil,
 	}
+}
+
+// DomainRoot returns the configured absolute root for domain, or false.
+// Leading "~" / "~/" in the configured value is expanded to the user home.
+func (c Config) DomainRoot(domain string) (string, bool, error) {
+	domain = strings.TrimSpace(domain)
+	if domain == "" || c.Domains == nil {
+		return "", false, nil
+	}
+	raw, ok := c.Domains[domain]
+	if !ok {
+		return "", false, nil
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", false, nil
+	}
+	abs, err := ExpandUser(raw)
+	if err != nil {
+		return "", true, fmt.Errorf("domain %q root: %w", domain, err)
+	}
+	if !filepath.IsAbs(abs) {
+		return "", true, fmt.Errorf("domain %q root must be absolute (after ~ expansion), got %q", domain, abs)
+	}
+	return abs, true, nil
+}
+
+// ExpandUser expands a leading "~" or "~/" to the process user's home directory.
+// Other paths are cleaned and returned unchanged (relative stays relative).
+func ExpandUser(p string) (string, error) {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return "", nil
+	}
+	if p == "~" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("expand ~: %w", err)
+		}
+		return home, nil
+	}
+	if strings.HasPrefix(p, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("expand ~: %w", err)
+		}
+		return filepath.Join(home, p[2:]), nil
+	}
+	return p, nil
 }
 
 // Dir returns the yerk config directory ($XDG_CONFIG_HOME/yerk).
@@ -82,27 +129,37 @@ func Dir() (string, error) {
 	return filepath.Join(base, AppName), nil
 }
 
-// FilePath returns the primary config file path (config.toml).
+// FilePath returns the primary tool config file path (config.toml).
 func FilePath() (string, error) {
+	if v := os.Getenv("YERK__CONFIG"); v != "" {
+		return v, nil
+	}
 	dir, err := Dir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "config.toml"), nil
+	return filepath.Join(dir, ConfigFileName), nil
 }
 
-// Load reads config.toml if present, else returns Defaults.
-// YERK__CONFIG may point at an explicit file path.
+// CatalogPath returns the catalog file path (catalog.toml).
+func CatalogPath() (string, error) {
+	if v := os.Getenv("YERK__CATALOG"); v != "" {
+		return v, nil
+	}
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, CatalogFileName), nil
+}
+
+// Load reads tool config.toml if present, else returns Defaults.
 func Load() (Config, error) {
 	cfg := Defaults()
 
-	path := os.Getenv("YERK__CONFIG")
-	if path == "" {
-		var err error
-		path, err = FilePath()
-		if err != nil {
-			return cfg, err
-		}
+	path, err := FilePath()
+	if err != nil {
+		return cfg, err
 	}
 
 	data, err := os.ReadFile(path)
@@ -116,34 +173,16 @@ func Load() (Config, error) {
 	if err := toml.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("parse config %s: %w", path, err)
 	}
+	if cfg.Domains == nil {
+		cfg.Domains = nil
+	}
 	return applyEnv(cfg), nil
 }
 
-// applyEnv overlays a few well-known YERK__ overrides.
 func applyEnv(cfg Config) Config {
-	if v := os.Getenv("YERK__WORKSPACE_ROOT"); v != "" {
-		cfg.Workspace.Root = v
-	}
 	if v := os.Getenv("YERK__WORKSPACE_STYLE"); v != "" {
 		cfg.Workspace.Style = v
 	}
 	return cfg
 }
 
-// ExampleTOML is a starter config document for docs and `yerk init` later.
-const ExampleTOML = `# yerk host project catalog
-# Path: ~/.config/yerk/config.toml
-# Override file: YERK__CONFIG=/path/to/config.toml
-# Override dir:  YERK__CONFIG_DIR=/path/to/dir
-
-[workspace]
-# Host root under which projects are checked out (optional; PRJX/host layout may supply this).
-# root = "/home/you/tree"
-# MVP styles: "workspace-dir" (project/replica) | "project-dir" (project__replica)
-style = "workspace-dir"
-
-# [[projects]]
-# name = "example"
-# remote = "git@github.com:example/example.git"
-# tags = ["personal", "devel"]
-`

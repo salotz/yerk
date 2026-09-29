@@ -29,7 +29,6 @@ Value types and policies: [RFC 032](https://github.com/salotz/rfcs/tree/master/r
 | `YERK__CONFIG_DIR` | string | warn | `${XDG_CONFIG_HOME}/yerk` (else `~/.config/yerk`) | Directory containing `config.toml` and `catalog.toml` by default |
 | `YERK__CONFIG` | string | warn | `${YERK__CONFIG_DIR}/config.toml` | Absolute path to tool config |
 | `YERK__CATALOG` | string | warn | `${YERK__CONFIG_DIR}/catalog.toml` | Absolute path to project catalog |
-| `YERK__WORKSPACE_ROOT` | string | warn | config `[workspace].root` | Override checkout tree root |
 | `YERK__WORKSPACE_STYLE` | enum | warn | config style; else `workspace-dir` | `workspace-dir` \| `project-dir` |
 
 ## Platform (external)

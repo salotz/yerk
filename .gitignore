@@ -1,6 +1,10 @@
 # PRJX host-local tree (salotz RFC 28)
 .local/
 
+# RFC 23 host-local agent overrides (if placed inside a replica checkout)
+.agents.local.md
+.agents.local/
+
 # mise machine-local overrides / secrets
 .mise.local.toml
 mise.local.toml

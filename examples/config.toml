@@ -1,7 +1,15 @@
 # Example yerk tool / host configuration.
 # Copy to ~/.config/yerk/config.toml (or set YERK__CONFIG / YERK__CONFIG_DIR).
+# This file is host-specific: domain roots differ per machine (ADR 008).
 
 [workspace]
-# Absolute path to the tree where replicas are placed.
-# root = "/home/you/projects"
-style = "workspace-dir" # or "project-dir"
+# How replicas sit under each project's resolved workspace path:
+#   workspace-dir → <workspace>/<replica>              e.g. …/example/main
+#   project-dir   → <dir(workspace)>/<name>__<replica> e.g. …/example__main
+style = "workspace-dir"
+
+# Absolute roots per domain (catalog-relative paths join these).
+# Leading ~/ expands to the user home.
+[domains]
+personal = "~/tree/personal"
+# work = "/absolute/path/to/work-domain"

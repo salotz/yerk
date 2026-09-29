@@ -14,7 +14,7 @@ turning into a procedure or a full design doc.
 - **Config (tool)** — how `yerk` runs on this host (`config.toml`)
 - **Remote** — canonical VCS URI for a project
 - **Domain** — namespace label (not yet a filesystem map)
-- **Tag** — free-form bulk-select label
+- **Tag** — declared bulk-select label (catalog root vocabulary; ADR 010)
 - **Workspace** — root + layout **policy** for placing replicas
 - **Replica** — one concrete on-disk checkout on this host
 - **Presence / change** — see [status model](./status-model.md)

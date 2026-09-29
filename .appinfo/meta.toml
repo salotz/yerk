@@ -45,7 +45,7 @@ groups = ["config", "primary"]
 
 [env.vars.YERK__CONFIG]
 description = "Absolute path to the tool config file (config.toml)."
-long_description = "Tool/host behavior only (workspace root/style). Not the project catalog."
+long_description = "Tool/host behavior only: [workspace].style and [domains] roots for catalog-relative project paths (ADR 008). Not the project catalog."
 type = "string"
 policy = "warn"
 default = { resolution = "Uses ${YERK__CONFIG_DIR}/config.toml when YERK__CONFIG_DIR is set; otherwise ${XDG_CONFIG_HOME}/yerk/config.toml (or ~/.config/yerk/config.toml)." }
@@ -53,25 +53,19 @@ groups = ["config", "primary"]
 
 [env.vars.YERK__CATALOG]
 description = "Absolute path to the project catalog file (catalog.toml)."
-long_description = "Project registry only ([[projects]]). Missing file means empty catalog, not an error."
+long_description = "Project registry only ([[projects]]). Prefer path relative to [domains.<domain>] so the catalog stays host-portable. Missing file means empty catalog, not an error."
 type = "string"
 policy = "warn"
 default = { resolution = "Uses ${YERK__CONFIG_DIR}/catalog.toml when YERK__CONFIG_DIR is set; otherwise ${XDG_CONFIG_HOME}/yerk/catalog.toml (or ~/.config/yerk/catalog.toml)." }
 groups = ["config", "primary"]
 
-[env.vars.YERK__WORKSPACE_ROOT]
-description = "Override [workspace].root from tool config (checkout tree root)."
-long_description = "When unset, the value from config.toml [workspace].root is used. Empty config root leaves path math dependent on that setting."
-type = "string"
-policy = "warn"
-default = { resolution = "Unset: use [workspace].root from the loaded tool config (no separate built-in path)." }
-groups = ["workspace", "primary"]
-
 [env.vars.YERK__WORKSPACE_STYLE]
 description = "Override [workspace].style for replica path layout."
 long_description = """
-workspace-dir places replicas at <root>/<project>/<replica>.
-project-dir places replicas at <root>/<project>__<replica>.
+How replicas sit under each project's resolved workspace directory.
+workspace-dir: <workspace>/<replica> (e.g. …/yerk/main).
+project-dir: <dir(workspace)>/<name>__<replica> (e.g. …/yerk__main).
+Workspace path = domain root + relative catalog path (or absolute path).
 """
 type = "enum"
 policy = "warn"

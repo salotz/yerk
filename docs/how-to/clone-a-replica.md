@@ -5,18 +5,18 @@ Status: **stub**
 ## Goal
 
 Materialize an on-disk replica for a cataloged project with `yerk clone`
-(and ensure workspace parents if needed).
+(after the project workspace exists if needed).
 
 ## Prerequisites
 
 - Project already in the catalog
 - `git` on `PATH`
-- Workspace root configured
+- Domain roots configured for relative catalog paths (ADR 008)
 
 ## Steps (to write)
 
-1. Confirm resolve path: `yerk path <project>`
-2. Optional: `yerk ensure <project>` for layout parents
+1. Confirm resolve path: `yerk path <project> <replica>` (workspace: `yerk path <project>`)
+2. Optional: `yerk workspace ensure <project>` (or `--all`) for workspace dirs
 3. `yerk clone <project> [replica]`
 4. Verify with `yerk status` / `yerk status --git`
 

@@ -1,10 +1,21 @@
 # Example yerk project catalog.
 # Copy to ~/.config/yerk/catalog.toml (or set YERK__CATALOG / YERK__CONFIG_DIR).
+#
+# Prefer path relative to [domains.<domain>] in config.toml (portable).
+# Project workspace owns replicas; not a checkout path.
+# workspace-dir style → replica at <workspace>/<replica>.
+# Absolute path remains a host-local escape hatch (ADR 008).
+#
+# Declare the closed tag vocabulary first (ADR 010). Project tags must be
+# members of this list. Start empty and add labels as you need them:
+#   tags = ["devel", "work"]
+
+tags = []
 
 [[projects]]
 name = "example"
 domain = "personal"
 remote = "git@github.com:example/example.git"
-tags = ["devel"]
+path = "devel/example"
+# tags = ["devel"]           # optional; each value must be in catalog tags
 # default_replica = "main"   # optional; else remote HEAD / fallback main
-# path = "/absolute/override/replica/dir"

@@ -1,0 +1,305 @@
+# Domain language and near-term behavior
+
+Status: **draft accepted for near-term** (operator design session 2026-09-25).
+
+Source: idea note `software-project-management-tool`, `design/goals.md`,
+PRJX (RFC 28), host domains (RFC 25), and this workshop.
+
+This document freezes vocabulary and the first feature slice. Implementation
+plans live under `.agents/plans/`. Longer-horizon features stay in `goals.md`.
+
+---
+
+## Product one-liner
+
+`yerk` is a **host multi-project manager**: it keeps a **catalog** of software
+projects, **materializes** their **replicas** into a **workspace** layout,
+**resolves** paths by name, and reports **presence** and **change** status.
+It speaks PRJX vocabulary; it does not redefine the PRJX spec.
+
+---
+
+## Nouns
+
+| Noun | Meaning |
+| --- | --- |
+| **Project** | Named unit of software work managed on this host. Catalog identity is a short `name`. Optional `domain` namespaces the project and selects a host domain root when `path` is relative. MVP assumes one primary **remote**; multi-remote is allowed later. |
+| **Catalog** | Host-global registry of projects (`catalog.toml`). Source of truth for *what* exists. |
+| **Config (tool)** | Host/tool behavior (`config.toml`): workspace **style**, probe defaults, later hooks. Source of truth for *how on this host*. May differ per machine. |
+| **Remote** | Clone URI (git URL or path) for the project’s canonical VCS content. |
+| **Domain** | Namespace / context label on a project (e.g. `personal`, `examol`). Selects a host domain root when `path` is relative (ADR 008). |
+| **Tag** | Declared bulk-select label. Catalog root `tags = […]` is a **closed vocabulary**; each project’s `tags` must be members (ADR 010). Orthogonal to domain. |
+| **Project workspace** | On-disk directory that **owns** a project's replicas. Catalog `path` points here (e.g. `…/devel/yerk`). Not a git checkout. |
+| **Workspace (policy)** | How replicas are placed relative to each project workspace (`style`). A shared host-wide root for every project is deferred. |
+| **Replica** | One concrete on-disk checkout of a project on this host (PRJX), e.g. `…/yerk/main`. |
+| **Replica distinguisher** | Token separating replicas of the same project (often default branch short name). |
+| **Change status** | Observed git dirtiness / sync flags for a replica. |
+| **Presence status** | Whether the expected replica path is missing, present, or invalid on disk. |
+| **Local (config)** | Host/replica-only files staged into a checkout (PRJX `.local` / RFC 26). Named for later; out of near-term behavior. |
+
+### Avoid conflating
+
+- Project ≠ directory; a project may have zero or many replicas.
+- Replica ≠ branch; branch is git; replica is host placement (often tracking a branch).
+- **Project workspace ≠ replica**; catalog `path` is the workspace (`…/yerk`), not `…/yerk/main`.
+- Workspace policy ≠ one global root (yet); style applies under each project's path.
+- Tag ≠ domain.
+- `yerk` ≠ PRJX (tool vs spec).
+- **Checkout** is avoided as a product verb; it overloaded too many actions.
+
+---
+
+## Verbs (internal) and CLI (short)
+
+| Intent | Internal verb | Near-term CLI |
+| --- | --- | --- |
+| Add/update catalog row | register | hand-edit catalog (future `yerk register`) |
+| List projects + states | status (read model) | `yerk status` [`--tag`] |
+| Path math only | resolve | `yerk path` (alias: `resolve`); bare name → workspace, +replica → checkout |
+| Create project workspace dir | materialize workspace | `yerk workspace ensure <proj>…` or `--all` (later also `--tag`) |
+| Create replica via git | materialize replica | `yerk clone` (later also `--tag` bulk) |
+| Read git state | probe change status | `yerk status --git` |
+| Sync | pull / push | later (not in CLI until implemented; tag select expected) |
+| Apply host-local files | stage locals | later |
+
+Materialize **workspace** (`yerk workspace ensure`) and materialize **replica**
+(`yerk clone`) are always separate steps in the model.
+
+### Project selection (bulk)
+
+Commands that act on **many** projects share one selection model (ADR 010):
+
+| Selector | Meaning | Near-term |
+| --- | --- | --- |
+| (default / all catalog) | Every `[[projects]]` row | `yerk status` with no `--tag` |
+| `--tag <name>` | Projects that list declared tag `<name>` | `yerk status --tag` **done**; extend to ensure/clone/… |
+| project name args | Explicit subset | `workspace ensure <proj>…`, `clone <proj>` |
+| `--all` | Explicit full catalog (opt-in bulk mutate) | `workspace ensure --all` |
+
+Rules:
+
+- `<name>` for `--tag` must appear in catalog root `tags` (unknown → error).
+- Declared tag with zero projects → empty match (not an error) for read ops;
+  mutate ops may still refuse empty selection where that is safer.
+- Names and `--all` remain mutually exclusive where both exist (ADR 009);
+  `--tag` vs names/`--all` exclusivity is defined when those commands gain `--tag`.
+- Implementation path: `Catalog.SelectByTag` (and name/`--all` helpers); status
+  already takes a pre-selected `[]Project` list.
+
+---
+
+## Identity
+
+Near-term:
+
+```text
+project:  <name>                      # catalog key
+ref:      <name>[/<distinguisher>]    # default distinguisher if omitted
+fq hint:  <domain>.<name>             # display / future PRJX align; not required in paths yet
+```
+
+Default replica distinguisher when omitted:
+
+1. Optional per-project override in catalog (`default_replica`), else
+2. Remote default branch short name (`git ls-remote --symref <uri> HEAD`), else
+3. Fallback `main`.
+
+---
+
+## Status model
+
+### Presence status (disk ↔ expected replica path)
+
+| Value | Meaning |
+| --- | --- |
+| `missing` | Catalog expects a path; it does not exist. |
+| `present` | Path exists and is a usable git checkout (`.git` file or directory / worktree). |
+| `invalid` | Path exists but is not a usable git checkout. |
+
+Column / docs label: **presence** (not “placement”).
+
+### Change status (git probe; only when presence=`present`)
+
+Orthogonal **flags** (combinatorial), not a single exclusive enum.
+
+**Local (MVP default with `--git`):**
+
+| Flag | Meaning |
+| --- | --- |
+| `clean` | No staged, unstaged, or untracked changes. |
+| `dirty` | Staged and/or unstaged modifications to tracked files. |
+| `untracked` | Untracked files present (separate from `dirty`). |
+
+**Sync (include in probe when cheap enough; may be `sync-unknown` without network):**
+
+| Flag | Meaning |
+| --- | --- |
+| `ahead` | Local has commits not in upstream. |
+| `behind` | Upstream has commits not in local. |
+| `no-upstream` | No tracking branch. |
+| `sync-unknown` | Upstream query failed or skipped. |
+
+**Probe-level:** omit change flags when presence ≠ `present`; `error` if git probe fails unexpectedly.
+
+Display: space-separated flags; show `clean` only when no other local flags apply.
+
+### Status command modes
+
+| Mode | Behavior |
+| --- | --- |
+| `yerk status` | Catalog rows + **presence** for default replica (fast). |
+| `yerk status --git` | Also probe change flags. |
+| `yerk status --git --fetch` | Later: fetch then probe. Not near-term required. |
+
+Near-term status targets the **default replica** per project, not every child
+directory under a project. Multi-replica listing can follow once the model is
+implemented.
+
+---
+
+## Workspace placement (near-term)
+
+1. **Resolve project workspace** from catalog + host domains ([ADR 008](./decisions/008-domain-roots-and-relative-catalog-paths.md)):
+
+   | Catalog `path` | Workspace |
+   | --- | --- |
+   | Relative | `<domains[domain]>/<path>` (domain required) |
+   | Absolute (`~/` ok) | that path (host escape hatch) |
+
+2. Tool config **`[workspace].style`** maps replica distinguisher `R` under
+   that workspace:
+
+| Style | Replica path | Example |
+| --- | --- | --- |
+| `workspace-dir` | `<workspace>/<R>` | ws=`…/yerk`, R=`main` → `…/yerk/main` |
+| `project-dir` | `<dir(workspace)>/<name>__<R>` | ws=`…/yerk`, R=`main` → `…/yerk__main` |
+
+Domain roots are **per domain**, not one shared root for every project name.
+
+
+## Config vs catalog files
+
+Under `$XDG_CONFIG_HOME/yerk` (see ADR 004):
+
+| File | Owns |
+| --- | --- |
+| `config.toml` | Tool/host behavior: `[workspace].style`, `[domains]` roots, future defaults. |
+| `catalog.toml` | Root `tags = […]` vocabulary + `[[projects]]` registry (prefer relative project-workspace `path`). |
+
+Env:
+
+- `YERK__CONFIG` / `YERK__CONFIG_DIR` — tool config (existing direction).
+- `YERK__CATALOG` — explicit catalog file path.
+- `YERK__WORKSPACE_STYLE` — optional style overlay.
+
+Missing catalog ⇒ empty registry. Missing config ⇒ defaults.
+
+### Catalog row (MVP sketch)
+
+```toml
+tags = ["devel"]          # closed vocabulary (ADR 010); project tags ⊆ this list
+
+[[projects]]
+name = "yerk"
+domain = "personal"
+remote = "git@github.com:salotz/yerk.git"
+tags = ["devel"]
+# default_replica = ""    # empty → remote HEAD branch name
+path = "devel/yerk"       # → <domains.personal>/devel/yerk (not …/yerk/main)
+```
+
+### Tool config (MVP sketch)
+
+```toml
+[workspace]
+style = "workspace-dir"   # → <workspace>/<replica>
+
+[domains]
+personal = "~/tree/personal"
+```
+
+---
+
+## Near-term feature slice
+
+In scope:
+
+1. **Static listing** from `catalog.toml` with **presence** (and optional **change**) status.
+2. **Tag vocabulary + bulk select** — closed catalog `tags`; `yerk status --tag` (ADR 010); same selector for other bulk ops as they grow.
+3. **Ensure** project workspace directories (`yerk workspace ensure <proj>…` or `--all`; not replica leaves; ADR 009).
+4. **Clone** default-branch replica into layout (`materialize replica`).
+5. **Resolve** paths for project / replica (`yerk path`).
+6. **Change status** via git probe (`yerk status --git`).
+
+Explicitly out of near-term:
+
+- Local config staging, FS watch daemon, port/resource tracking, mutagen, bulk
+  domain-tree mapping, monorepo presets, `register` mutation UX, push/pull.
+  Do not ship unimplemented CLI stubs; add commands when behavior exists.
+
+---
+
+## Architecture (near-term)
+
+```text
+CLI (cobra)
+  → load config.toml + catalog.toml
+  → layout (pure path math; ensure dirs)
+  → git adapter (default branch, clone, presence, change probe)
+  → print tables
+```
+
+Principles:
+
+1. Catalog = *what*; config = *how on this host*.
+2. Layout is pure (no git, no network).
+3. Only the git adapter talks to git.
+4. Materialize workspace ≠ materialize replica ≠ stage locals (later).
+5. Status is a read model: join(catalog, resolve, presence[, change]).
+6. No daemon in near-term.
+7. Parallel git probes are **planned early** in the adapter API (e.g. worker
+   pool) but can ship serial first; the domain model must not assume serial-only
+   semantics.
+
+---
+
+## Technical defaults (near-term)
+
+| Topic | Choice | Rationale |
+| --- | --- | --- |
+| Git integration | Shell out to `git` on `PATH` | Host-consistent; full porcelain/plumbing without re-implementing; easy `ls-remote`, `status --porcelain=v2`, worktrees. Swap-able behind an interface. See note below. |
+| Default branch | `git ls-remote --symref <remote> HEAD` | Works before clone. |
+| Catalog edits | Hand-edit (agents OK); `register` later | Matches operator workflow. |
+| Ensure | `mkdir -p` project workspace only; never delete; no replica leaf | Safe materialize workspace ([ADR 009](./decisions/009-workspace-subcommand-and-ensure-scope.md)). |
+| Clone into non-empty path | Refuse | Predictable. |
+| Parallel status | Design for N-way probe; implement after vertical slice | Operator priority: sooner rather than buried; after domain model works. |
+
+### Why `git` subprocess instead of go-git?
+
+Not because subprocess is “simpler” in the abstract — it is a **tradeoff**:
+
+- **go-git** pros: pure Go, no `git` binary dependency, in-process control.
+- **go-git** cons: subset/impedance mismatch with real git (SSH agents, hooks,
+  worktrees, sparse, credential helpers, auth oddities); status/sync edge cases
+  often end up shelling out anyway; larger dependency surface for an operator
+  tool that already assumes a dev host with git.
+
+- **`git` CLI** pros: identical behavior to the operator’s git; one mental
+  model; trivial to debug (`GIT_TRACE`); covers default-branch discovery,
+  porcelain status, worktrees, fetch later.
+- **`git` CLI** cons: requires `git` on `PATH`; process overhead; parsing
+  porcelain carefully; harder in minimal containers without git.
+
+**Decision:** adapter interface in Go, **default implementation = `git`
+subprocess**. Revisit go-git (or hybrid) if we target hosts without git or hit
+process scaling limits after parallelization.
+
+---
+
+## Related docs
+
+- [goals.md](./goals.md) — product north star and post-MVP directions
+- [decisions/](./decisions/) — ADRs (esp. 003 XDG, 004 config vs catalog, 005 CLI help / envvars)
+- [../docs/](../docs/) — operator/user docs (Diátaxis; ad hoc Markdown, [ADR 006](./decisions/006-ad-hoc-docs-diataxis.md))
+- [../.appinfo/meta.toml](../.appinfo/meta.toml) — application info + env registry (RFC 030/031)
+- [../.agents/plans/near-term.md](../.agents/plans/near-term.md) — implementation plan

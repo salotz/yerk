@@ -62,28 +62,23 @@ mise run fmt            # gofmt -w
 
 ```sh
 .local/bin/yerk config path
-.local/bin/yerk config example
 .local/bin/yerk config show
 .local/bin/yerk catalog path
-.local/bin/yerk catalog example
 .local/bin/yerk catalog show
 ```
 
-Point at a throwaway config **directory** (both `config.toml` and `catalog.toml`):
+Point at a throwaway config **directory** (both `config.toml` and `catalog.toml`),
+seeded from portable examples (ADR 007 — do **not** commit host-private trees):
 
 ```sh
-YERK__CONFIG_DIR=/tmp/yerk-dev .local/bin/yerk status
-```
+mkdir -p /tmp/yerk-dev
+cp examples/config.toml /tmp/yerk-dev/config.toml
+cp examples/catalog.toml /tmp/yerk-dev/catalog.toml
+# edit [domains] roots; keep catalog path relative (e.g. devel/example)
 
-Or the in-repo operator fixture (this host’s real paths):
-
-```sh
-mise run host-status
-mise run host-status-git
-export YERK__CONFIG_DIR="$PWD/fixtures/operator-host"
-.local/bin/yerk path yerk
-.local/bin/yerk status --git --tag local
-.local/bin/yerk clone pytest-checklist   # or wepy / wepy2 / geomm
+export YERK__CONFIG_DIR=/tmp/yerk-dev
+.local/bin/yerk status
+.local/bin/yerk catalog show
 ```
 
 Unit tests: `mise run test` (temp dirs + fake git where needed; real `git` for
@@ -177,7 +172,7 @@ mise run build
 | `internal/cli` | commands |
 | `internal/config` | tool config + catalog load |
 | `internal/envvars` | env registry + help/live formatters |
-| `internal/workspace` | path styles + ensure |
+| `internal/workspace` | path styles + workspace ensure |
 | `internal/presence` | disk presence |
 | `internal/gitcmd` | git adapter |
 | `internal/project` | resolve / status |
