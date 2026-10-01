@@ -18,8 +18,8 @@ locks shapes in the wrong layer:
   without rewriting cobra `RunE` logic.
 
 Domain language already distinguishes **project** vs **replica** status
-scopes ([domain-and-near-term.md](../domain-and-near-term.md)). The plan
-calls this the P5 pilot before status UX rewrite (P6).
+scopes ([domain-and-near-term.md](../domain-and-near-term.md)). This ADR
+was the model pilot before status UX rewrite landed.
 
 ## Decision
 
@@ -80,6 +80,8 @@ cobra `RunE` beyond flag parse, selection, and print.
 - Non-file backends
 - Changing default `yerk status` columns (that is P6; types here must not
   block project- vs replica-scoped views)
+- Identifier / `yerk://` grammar — see [012](./012-identifiers-and-yerk-uri.md)
+  (`uri` field on resources)
 
 ## Consequences
 
@@ -94,6 +96,5 @@ cobra `RunE` beyond flag parse, selection, and print.
 ## Related
 
 - [domain-and-near-term.md](../domain-and-near-term.md) — Explicit resources; status scopes
-- [`.agents/plans/near-term.md`](../../.agents/plans/near-term.md) — P5 / P6
 - [004](./004-config-and-catalog-split.md) — config vs catalog files
 - [010](./010-catalog-tag-vocabulary.md) — closed tags on the catalog document

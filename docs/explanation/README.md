@@ -16,6 +16,7 @@ should stay operator-facing and link out for ADR-level detail.
 | Page | Status | Intent |
 | --- | --- | --- |
 | [Concepts](./concepts.md) | Stub | Project, catalog, workspace, replica, domain, tag |
+| [Identifiers](./identifiers.md) | Stub | Bare id / `yerk://` vs filesystem path |
 | [Workspace and replicas](./workspace-and-replicas.md) | Stub | Layout policy vs on-disk checkouts |
 | [Status model](./status-model.md) | Stub | Presence vs change; why they are separate |
 | [yerk and PRJX](./yerk-and-prjx.md) | Stub | Tool vs spec; shared vocabulary |

@@ -2,6 +2,7 @@ package api
 
 import (
 	"github.com/salotz/yerk/internal/config"
+	"github.com/salotz/yerk/internal/id"
 	"github.com/salotz/yerk/internal/presence"
 )
 
@@ -10,6 +11,7 @@ func ProjectFromConfig(p config.Project) Project {
 	return Project{
 		APIVersion:     APIVersion,
 		Kind:           KindProject,
+		URI:            id.ProjectURI(p.Domain, p.Name),
 		Name:           p.Name,
 		Domain:         p.Domain,
 		Remote:         p.Remote,

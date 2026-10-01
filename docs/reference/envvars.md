@@ -37,7 +37,7 @@ Value types and policies: [RFC 032](https://github.com/salotz/rfcs/tree/master/r
 | --- | --- | --- | --- | --- |
 | `XDG_CONFIG_HOME` | string | warn | platform / XDG default | Base for user config when `YERK__CONFIG_DIR` unset |
 | `HOME` | string | warn | platform home | Fallback for user config dir resolution |
-| `PATH` | string | warn | process `PATH` | Must include `git` for clone / status change probes / ls-remote |
+| `PATH` | string | warn | process `PATH` | Must include `git` for materialize / status change probes / ls-remote |
 
 ## PRJX (not in `.appinfo`)
 

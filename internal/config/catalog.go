@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
+
+	"github.com/salotz/yerk/internal/id"
 )
 
 // Catalog is the host-global project registry.
@@ -20,12 +22,12 @@ type Catalog struct {
 
 // Project is one registered software project.
 type Project struct {
-	// Name is the short project id used in CLI queries (catalog key).
+	// Name is the short project name (within Domain). Full bare id is domain/name.
 	Name string `toml:"name"`
-	// Domain is the namespace used to select a host domain root in config.toml
-	// when Path is relative (ADR 008). Also a display label.
-	Domain string `toml:"domain,omitempty"`
-	// Remote is the primary clone URI (git URL or path). MVP: one remote.
+	// Domain is the required logical namespace for ids/URIs (ADR 012).
+	// Also used today to select a host domain root when Path is relative (ADR 008).
+	Domain string `toml:"domain"`
+	// Remote is the primary git remote URI (or path). MVP: one remote.
 	Remote string `toml:"remote"`
 	// Path is the project workspace directory (owns replicas).
 	// Prefer a path relative to the domain root (portable catalog), e.g.
@@ -33,11 +35,21 @@ type Project struct {
 	// Absolute paths are allowed as a host-local escape hatch.
 	// Example (workspace-dir): workspace …/devel/yerk → replica main at …/yerk/main.
 	Path string `toml:"path,omitempty"`
-	// DefaultReplica overrides remote HEAD branch short name when set.
+	// DefaultReplica overrides remote HEAD branch short name when set (main replica).
 	DefaultReplica string `toml:"default_replica,omitempty"`
 	// Tags group projects for bulk operations. Each entry must appear in
 	// Catalog.Tags (closed vocabulary).
 	Tags []string `toml:"tags,omitempty"`
+}
+
+// ID returns the bare project identifier domain/name.
+func (p Project) ID() string {
+	return id.Ref{Domain: strings.TrimSpace(p.Domain), Project: strings.TrimSpace(p.Name)}.BareProject()
+}
+
+// URI returns the canonical project URI yerk://domain/name.
+func (p Project) URI() string {
+	return id.ProjectURI(strings.TrimSpace(p.Domain), strings.TrimSpace(p.Name))
 }
 
 // EmptyCatalog is a catalog with no projects.
@@ -71,18 +83,39 @@ func LoadCatalog() (Catalog, error) {
 	return cat, nil
 }
 
-// Validate checks the closed tag vocabulary and project rows.
+// Validate checks identity fields, closed tag vocabulary, and project rows.
 // Empty catalogs (no projects) are valid even with no declared tags.
 func (c Catalog) Validate() error {
 	allowed, err := tagSet(c.Tags, "catalog tags")
 	if err != nil {
 		return err
 	}
+	seenID := make(map[string]struct{}, len(c.Projects))
 	for _, p := range c.Projects {
-		name := p.Name
-		if strings.TrimSpace(name) == "" {
-			name = "(unnamed)"
+		name := strings.TrimSpace(p.Name)
+		domain := strings.TrimSpace(p.Domain)
+		label := name
+		if label == "" {
+			label = "(unnamed)"
 		}
+		if name == "" {
+			return fmt.Errorf("project %q: empty name", label)
+		}
+		if domain == "" {
+			return fmt.Errorf("project %q: domain is required (ADR 012)", name)
+		}
+		if err := validateIdentitySegment("domain", domain); err != nil {
+			return fmt.Errorf("project %q: %w", name, err)
+		}
+		if err := validateIdentitySegment("name", name); err != nil {
+			return fmt.Errorf("project %q: %w", name, err)
+		}
+		pid := domain + "/" + name
+		if _, dup := seenID[pid]; dup {
+			return fmt.Errorf("duplicate project id %q", pid)
+		}
+		seenID[pid] = struct{}{}
+
 		seen := make(map[string]struct{}, len(p.Tags))
 		for _, raw := range p.Tags {
 			t := strings.TrimSpace(raw)
@@ -100,6 +133,14 @@ func (c Catalog) Validate() error {
 			}
 			seen[t] = struct{}{}
 		}
+	}
+	return nil
+}
+
+func validateIdentitySegment(what, s string) error {
+	ref, err := id.Parse(s)
+	if err != nil || ref.Domain != "" || ref.Replica != "" || ref.Project != s {
+		return fmt.Errorf("invalid %s %q (use letters, digits, '-', '_', '.')", what, s)
 	}
 	return nil
 }
@@ -137,7 +178,9 @@ func (c Catalog) HasTag(tag string) bool {
 	return false
 }
 
-// Find returns the project with the given name, or false if missing.
+// Find returns the project with the given short name, or false if missing.
+// If multiple domains share the name, the first row wins — prefer Resolve
+// for CLI/user input (ADR 012 ambiguity errors).
 func (c Catalog) Find(name string) (Project, bool) {
 	name = strings.TrimSpace(name)
 	for _, p := range c.Projects {
@@ -146,6 +189,44 @@ func (c Catalog) Find(name string) (Project, bool) {
 		}
 	}
 	return Project{}, false
+}
+
+// FindID returns the project with bare id domain/name (or URI-equivalent pair).
+func (c Catalog) FindID(domain, name string) (Project, bool) {
+	domain = strings.TrimSpace(domain)
+	name = strings.TrimSpace(name)
+	for _, p := range c.Projects {
+		if p.Domain == domain && p.Name == name {
+			return p, true
+		}
+	}
+	return Project{}, false
+}
+
+// ProjectKeys returns identity keys for id.Expand.
+func (c Catalog) ProjectKeys() []id.ProjectKey {
+	out := make([]id.ProjectKey, 0, len(c.Projects))
+	for _, p := range c.Projects {
+		out = append(out, id.ProjectKey{
+			Domain: strings.TrimSpace(p.Domain),
+			Name:   strings.TrimSpace(p.Name),
+		})
+	}
+	return out
+}
+
+// Resolve expands a bare id, short name, or yerk:// URI to a catalog project
+// and parsed ref. The ref may include a replica segment from the input.
+func (c Catalog) Resolve(input string) (Project, id.Ref, error) {
+	ref, err := id.Expand(input, c.ProjectKeys())
+	if err != nil {
+		return Project{}, id.Ref{}, err
+	}
+	p, ok := c.FindID(ref.Domain, ref.Project)
+	if !ok {
+		return Project{}, id.Ref{}, fmt.Errorf("project %q not in catalog", ref.BareProject())
+	}
+	return p, ref, nil
 }
 
 // FilterTag returns projects that include tag. Empty tag returns all.

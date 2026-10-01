@@ -14,6 +14,6 @@ Publication remains ad hoc plain Markdown
 | Page | Status | Intent |
 | --- | --- | --- |
 | [Add a project to the catalog](./add-a-project.md) | Stub | Register a project by editing `catalog.toml` |
-| [Clone a default replica](./clone-a-replica.md) | Stub | Materialize a checkout with `yerk clone` |
+| [Materialize a default replica](./materialize-a-replica.md) | Stub | Materialize a checkout with `yerk materialize` |
 | [Check presence and change status](./check-status.md) | Stub | `yerk status` (change on; `--presence-only`) |
 | [Use example config files](./use-example-config.md) | Stub | Copy `examples/` into a throwaway `YERK__CONFIG_DIR` |

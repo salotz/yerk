@@ -183,6 +183,65 @@ path = "devel/missing-one"
 	}
 }
 
+func TestPathAmbiguousShortName(t *testing.T) {
+	dir := t.TempDir()
+	domainRoot := filepath.Join(dir, "tree")
+	cfg := []byte(`[workspace]
+style = "workspace-dir"
+
+[domains]
+personal = "` + filepath.Join(domainRoot, "personal") + `"
+work = "` + filepath.Join(domainRoot, "work") + `"
+`)
+	cat := []byte(`
+tags = []
+
+[[projects]]
+name = "wumpus"
+domain = "personal"
+remote = "git@example.com:a/wumpus.git"
+path = "devel/wumpus"
+
+[[projects]]
+name = "wumpus"
+domain = "work"
+remote = "git@example.com:b/wumpus.git"
+path = "devel/wumpus"
+`)
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), cfg, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("YERK__CONFIG_DIR", dir)
+	t.Setenv("YERK__CONFIG", "")
+	t.Setenv("YERK__CATALOG", "")
+	t.Setenv("YERK__WORKSPACE_STYLE", "")
+
+	var out bytes.Buffer
+	streams := cli.IO{Out: &out, Err: &out}
+	err := cli.Execute(context.Background(), streams, []string{"path", "wumpus"})
+	if err == nil {
+		t.Fatal("expected ambiguous short name error")
+	}
+	if !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("got %v", err)
+	}
+	if !strings.Contains(err.Error(), "personal/wumpus") || !strings.Contains(err.Error(), "work/wumpus") {
+		t.Fatalf("want candidates listed: %v", err)
+	}
+
+	out.Reset()
+	want := filepath.Join(domainRoot, "work", "devel", "wumpus")
+	if err := cli.Execute(context.Background(), streams, []string{"path", "work/wumpus"}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(out.String()) != want {
+		t.Fatalf("got %q want %q", out.String(), want)
+	}
+}
+
 func TestStatusUnknownTag(t *testing.T) {
 	dir := t.TempDir()
 	cat := []byte(`
@@ -190,6 +249,7 @@ tags = ["devel"]
 
 [[projects]]
 name = "yerk"
+domain = "personal"
 remote = "git@example.com:salotz/yerk.git"
 path = "/tmp/yerk"
 tags = ["devel"]
@@ -455,13 +515,14 @@ default_replica = "main"
 	}
 }
 
-func TestCloneSelectionErrors(t *testing.T) {
+func TestMaterializeSelectionErrors(t *testing.T) {
 	dir := t.TempDir()
 	cat := []byte(`
 tags = ["devel", "work"]
 
 [[projects]]
 name = "yerk"
+domain = "personal"
 remote = "git@example.com:salotz/yerk.git"
 path = "/tmp/yerk"
 tags = ["devel"]
@@ -481,12 +542,12 @@ tags = ["devel"]
 		args []string
 		want string
 	}{
-		{"bare", []string{"clone"}, "name a project"},
-		{"all+name", []string{"clone", "--all", "yerk"}, "not a combination"},
-		{"tag+name", []string{"clone", "--tag", "devel", "yerk"}, "not a combination"},
-		{"all+tag", []string{"clone", "--all", "--tag", "devel"}, "not a combination"},
-		{"unknown-tag", []string{"clone", "--tag", "nope"}, "unknown tag"},
-		{"empty-tag", []string{"clone", "--tag", "work"}, "no projects matched tag"},
+		{"bare", []string{"materialize"}, "name a project"},
+		{"all+name", []string{"materialize", "--all", "yerk"}, "not a combination"},
+		{"tag+name", []string{"materialize", "--tag", "devel", "yerk"}, "not a combination"},
+		{"all+tag", []string{"materialize", "--all", "--tag", "devel"}, "not a combination"},
+		{"unknown-tag", []string{"materialize", "--tag", "nope"}, "unknown tag"},
+		{"empty-tag", []string{"materialize", "--tag", "work"}, "no projects matched tag"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -501,14 +562,14 @@ tags = ["devel"]
 	}
 }
 
-func TestCloneAllEmptyCatalog(t *testing.T) {
+func TestMaterializeAllEmptyCatalog(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("YERK__CONFIG_DIR", dir)
 	t.Setenv("YERK__CONFIG", "")
 	t.Setenv("YERK__CATALOG", "")
 	var out bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &out}
-	err := cli.Execute(context.Background(), streams, []string{"clone", "--all"})
+	err := cli.Execute(context.Background(), streams, []string{"materialize", "--all"})
 	if err == nil {
 		t.Fatal("expected empty catalog error")
 	}
@@ -517,7 +578,7 @@ func TestCloneAllEmptyCatalog(t *testing.T) {
 	}
 }
 
-func TestCloneBulkTagAndAll(t *testing.T) {
+func TestMaterializeBulkTagAndAll(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}
@@ -568,25 +629,25 @@ tags = ["work"]
 	var out, errBuf bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &errBuf}
 
-	if err := cli.Execute(context.Background(), streams, []string{"clone", "--tag", "devel"}); err != nil {
-		t.Fatalf("clone --tag: %v\nerr=%s\nout=%s", err, errBuf.String(), out.String())
+	if err := cli.Execute(context.Background(), streams, []string{"materialize", "--tag", "devel"}); err != nil {
+		t.Fatalf("materialize --tag: %v\nerr=%s\nout=%s", err, errBuf.String(), out.String())
 	}
 	alphaPath := filepath.Join(domainRoot, "devel", "alpha", "main")
 	if strings.TrimSpace(out.String()) != alphaPath {
-		t.Fatalf("clone --tag out=%q want %q", out.String(), alphaPath)
+		t.Fatalf("materialize --tag out=%q want %q", out.String(), alphaPath)
 	}
 	if _, err := os.Stat(filepath.Join(alphaPath, ".git")); err != nil {
 		t.Fatalf("alpha checkout missing: %v", err)
 	}
 	betaPath := filepath.Join(domainRoot, "devel", "beta", "main")
 	if _, err := os.Stat(betaPath); !os.IsNotExist(err) {
-		t.Fatalf("beta should not be cloned by --tag devel")
+		t.Fatalf("beta should not be materialized by --tag devel")
 	}
 
 	out.Reset()
 	errBuf.Reset()
-	if err := cli.Execute(context.Background(), streams, []string{"clone", "--tag", "work"}); err != nil {
-		t.Fatalf("clone --tag work: %v\n%s", err, errBuf.String())
+	if err := cli.Execute(context.Background(), streams, []string{"materialize", "--tag", "work"}); err != nil {
+		t.Fatalf("materialize --tag work: %v\n%s", err, errBuf.String())
 	}
 	if !strings.Contains(out.String(), betaPath) {
 		t.Fatalf("expected beta path\n%s", out.String())
@@ -595,11 +656,11 @@ tags = ["work"]
 		t.Fatalf("beta checkout missing: %v", err)
 	}
 
-	// --all on already-cloned catalog should succeed (already present).
+	// --all on already-materialized catalog should succeed (already present).
 	out.Reset()
 	errBuf.Reset()
-	if err := cli.Execute(context.Background(), streams, []string{"clone", "--all"}); err != nil {
-		t.Fatalf("clone --all when present should be ok: %v\n%s", err, errBuf.String())
+	if err := cli.Execute(context.Background(), streams, []string{"materialize", "--all"}); err != nil {
+		t.Fatalf("materialize --all when present should be ok: %v\n%s", err, errBuf.String())
 	}
 	sAll := out.String()
 	if !strings.Contains(sAll, alphaPath) || !strings.Contains(sAll, betaPath) {
@@ -610,7 +671,7 @@ tags = ["work"]
 	}
 }
 
-func TestCloneAlreadyPresentSingle(t *testing.T) {
+func TestMaterializeAlreadyPresentSingle(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}
@@ -648,14 +709,14 @@ path = "devel/alpha"
 
 	var out, errBuf bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &errBuf}
-	if err := cli.Execute(context.Background(), streams, []string{"clone", "alpha"}); err != nil {
-		t.Fatalf("first clone: %v\n%s", err, errBuf.String())
+	if err := cli.Execute(context.Background(), streams, []string{"materialize", "alpha"}); err != nil {
+		t.Fatalf("first materialize: %v\n%s", err, errBuf.String())
 	}
 	path := filepath.Join(domainRoot, "devel", "alpha", "main")
 	out.Reset()
 	errBuf.Reset()
-	if err := cli.Execute(context.Background(), streams, []string{"clone", "alpha"}); err != nil {
-		t.Fatalf("second clone should succeed: %v\n%s", err, errBuf.String())
+	if err := cli.Execute(context.Background(), streams, []string{"materialize", "alpha"}); err != nil {
+		t.Fatalf("second materialize should succeed: %v\n%s", err, errBuf.String())
 	}
 	if strings.TrimSpace(out.String()) != path {
 		t.Fatalf("out=%q want %q", out.String(), path)
@@ -664,11 +725,11 @@ path = "devel/alpha"
 		t.Fatalf("stderr=%q", errBuf.String())
 	}
 	if strings.Contains(errBuf.String(), "cloning ") {
-		t.Fatalf("should not re-clone\n%s", errBuf.String())
+		t.Fatalf("should not re-materialize\n%s", errBuf.String())
 	}
 }
 
-func TestCloneInvalidPathErrors(t *testing.T) {
+func TestMaterializeInvalidPathErrors(t *testing.T) {
 	dir := t.TempDir()
 	domainRoot := filepath.Join(dir, "personal")
 	// Path exists as a plain directory (no .git) → invalid presence.
@@ -709,7 +770,7 @@ path = "devel/alpha"
 
 	var out bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &out}
-	err := cli.Execute(context.Background(), streams, []string{"clone", "alpha"})
+	err := cli.Execute(context.Background(), streams, []string{"materialize", "alpha"})
 	if err == nil {
 		t.Fatal("expected error for invalid non-checkout path")
 	}
@@ -718,7 +779,7 @@ path = "devel/alpha"
 	}
 }
 
-func TestCloneAllFresh(t *testing.T) {
+func TestMaterializeAllFresh(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}
@@ -765,14 +826,14 @@ path = "devel/beta"
 
 	var out, errBuf bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &errBuf}
-	if err := cli.Execute(context.Background(), streams, []string{"clone", "--all"}); err != nil {
-		t.Fatalf("clone --all: %v\n%s", err, errBuf.String())
+	if err := cli.Execute(context.Background(), streams, []string{"materialize", "--all"}); err != nil {
+		t.Fatalf("materialize --all: %v\n%s", err, errBuf.String())
 	}
 	s := out.String()
 	alphaPath := filepath.Join(domainRoot, "devel", "alpha", "main")
 	betaPath := filepath.Join(domainRoot, "devel", "beta", "main")
 	if !strings.Contains(s, alphaPath) || !strings.Contains(s, betaPath) {
-		t.Fatalf("clone --all paths:\n%s", s)
+		t.Fatalf("materialize --all paths:\n%s", s)
 	}
 	for _, p := range []string{alphaPath, betaPath} {
 		if _, err := os.Stat(filepath.Join(p, ".git")); err != nil {

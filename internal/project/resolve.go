@@ -10,6 +10,7 @@ import (
 	"github.com/salotz/yerk/internal/api"
 	"github.com/salotz/yerk/internal/config"
 	"github.com/salotz/yerk/internal/gitcmd"
+	"github.com/salotz/yerk/internal/id"
 	"github.com/salotz/yerk/internal/presence"
 	"github.com/salotz/yerk/internal/workspace"
 )
@@ -114,6 +115,7 @@ func (r Resolver) ProjectStatus(ctx context.Context, p config.Project, opts Stat
 		return api.ProjectStatus{}, err
 	}
 	out := api.NewProjectStatus()
+	out.URI = id.ProjectURI(p.Domain, p.Name)
 	out.Name = p.Name
 	out.Domain = p.Domain
 	out.WorkspacePath = ws
@@ -139,6 +141,7 @@ func (r Resolver) replicaStatus(ctx context.Context, p config.Project, replica s
 	}
 	pres := presence.Classify(path)
 	row := api.NewReplicaStatus()
+	row.URI = id.ReplicaURI(p.Domain, p.Name, replica)
 	row.Project = p.Name
 	row.Replica = replica
 	row.Domain = p.Domain

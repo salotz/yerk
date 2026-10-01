@@ -51,7 +51,7 @@ Bulk selection by tag uses the closed vocabulary:
 - `yerk status --tag <name>` — requires `<name>` declared. Unknown tags
   error. Declared tag with zero projects is an empty match (not an error).
   When filtering, status prints `filter.tag=<name>`.
-- `yerk clone --tag <name>` — same declared-tag rule; empty match is an
+- `yerk materialize --tag <name>` — same declared-tag rule; empty match is an
   **error** (mutate). Mutually exclusive with project args and `--all`.
 - Same `Catalog.SelectByTag` helper is the shared path for bulk ops
   (`workspace ensure --tag` still pending).

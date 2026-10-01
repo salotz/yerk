@@ -24,6 +24,9 @@ func TestProjectFromConfig(t *testing.T) {
 	if p.Name != "yerk" || p.Domain != "personal" || p.Path != "devel/yerk" {
 		t.Fatalf("identity: %+v", p)
 	}
+	if p.URI != "yerk://personal/yerk" {
+		t.Fatalf("uri: %q", p.URI)
+	}
 	if p.DefaultReplica != "main" || p.Remote == "" {
 		t.Fatalf("placement: %+v", p)
 	}

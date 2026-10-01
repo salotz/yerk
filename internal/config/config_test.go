@@ -136,9 +136,9 @@ func TestFilterTag(t *testing.T) {
 	cat := config.Catalog{
 		Tags: []string{"devel", "work"},
 		Projects: []config.Project{
-			{Name: "a", Tags: []string{"devel"}},
-			{Name: "b", Tags: []string{"work"}},
-			{Name: "c", Tags: []string{"devel", "work"}},
+			{Name: "a", Domain: "personal", Tags: []string{"devel"}},
+			{Name: "b", Domain: "personal", Tags: []string{"work"}},
+			{Name: "c", Domain: "personal", Tags: []string{"devel", "work"}},
 		},
 	}
 	got := cat.FilterTag("devel")
@@ -163,7 +163,7 @@ func TestFilterTag(t *testing.T) {
 	}
 	lonely := config.Catalog{
 		Tags:     []string{"lonely"},
-		Projects: []config.Project{{Name: "a"}},
+		Projects: []config.Project{{Name: "a", Domain: "personal"}},
 	}
 	got, err = lonely.SelectByTag("lonely")
 	if err != nil {
@@ -180,8 +180,8 @@ func TestCatalogValidateTags(t *testing.T) {
 	ok := config.Catalog{
 		Tags: []string{"devel", "work"},
 		Projects: []config.Project{
-			{Name: "a", Tags: []string{"devel"}},
-			{Name: "b"},
+			{Name: "a", Domain: "personal", Tags: []string{"devel"}},
+			{Name: "b", Domain: "personal"},
 		},
 	}
 	if err := ok.Validate(); err != nil {
@@ -190,7 +190,7 @@ func TestCatalogValidateTags(t *testing.T) {
 
 	emptyVocabOK := config.Catalog{
 		Tags:     nil,
-		Projects: []config.Project{{Name: "a"}},
+		Projects: []config.Project{{Name: "a", Domain: "personal"}},
 	}
 	if err := emptyVocabOK.Validate(); err != nil {
 		t.Fatalf("empty tags + untagged projects: %v", err)
@@ -205,14 +205,14 @@ func TestCatalogValidateTags(t *testing.T) {
 			name: "undeclared project tag",
 			cat: config.Catalog{
 				Tags:     []string{"devel"},
-				Projects: []config.Project{{Name: "a", Tags: []string{"work"}}},
+				Projects: []config.Project{{Name: "a", Domain: "personal", Tags: []string{"work"}}},
 			},
 			want: "not declared",
 		},
 		{
 			name: "empty vocab with project tag",
 			cat: config.Catalog{
-				Projects: []config.Project{{Name: "a", Tags: []string{"devel"}}},
+				Projects: []config.Project{{Name: "a", Domain: "personal", Tags: []string{"devel"}}},
 			},
 			want: "not declared",
 		},
@@ -225,7 +225,7 @@ func TestCatalogValidateTags(t *testing.T) {
 			name: "duplicate project tag",
 			cat: config.Catalog{
 				Tags:     []string{"devel"},
-				Projects: []config.Project{{Name: "a", Tags: []string{"devel", "devel"}}},
+				Projects: []config.Project{{Name: "a", Domain: "personal", Tags: []string{"devel", "devel"}}},
 			},
 			want: "duplicate",
 		},
@@ -254,6 +254,7 @@ func TestLoadCatalogRejectsUndeclaredTag(t *testing.T) {
 	if err := os.WriteFile(catPath, []byte(`
 [[projects]]
 name = "yerk"
+domain = "personal"
 remote = "git@example.com:salotz/yerk.git"
 path = "/tmp/yerk"
 tags = ["devel"]
@@ -268,5 +269,42 @@ tags = ["devel"]
 	}
 	if !strings.Contains(err.Error(), "not declared") {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestCatalogValidateDomainRequired(t *testing.T) {
+	t.Parallel()
+	err := (config.Catalog{
+		Projects: []config.Project{{Name: "yerk", Remote: "r"}},
+	}).Validate()
+	if err == nil || !strings.Contains(err.Error(), "domain is required") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestCatalogResolve(t *testing.T) {
+	t.Parallel()
+	cat := config.Catalog{
+		Projects: []config.Project{
+			{Name: "yerk", Domain: "personal", Remote: "r1"},
+			{Name: "wumpus", Domain: "personal", Remote: "r2"},
+			{Name: "wumpus", Domain: "work", Remote: "r3"},
+		},
+	}
+	p, ref, err := cat.Resolve("yerk")
+	if err != nil || p.Domain != "personal" || ref.URI() != "yerk://personal/yerk" {
+		t.Fatalf("short: p=%+v ref=%+v err=%v", p, ref, err)
+	}
+	p, ref, err = cat.Resolve("yerk://personal/yerk/main")
+	if err != nil || !ref.IsReplica() || ref.Replica != "main" {
+		t.Fatalf("uri replica: %+v err=%v", ref, err)
+	}
+	_, _, err = cat.Resolve("wumpus")
+	if err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("want ambiguous, got %v", err)
+	}
+	p, ref, err = cat.Resolve("work/wumpus")
+	if err != nil || p.Domain != "work" {
+		t.Fatalf("qualified: %+v %+v %v", p, ref, err)
 	}
 }

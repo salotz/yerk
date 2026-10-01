@@ -106,7 +106,7 @@ func (v Var) EffectivePolicy() string {
 // catalogLoadCommands are commands that load tool config and/or catalog.
 func catalogLoadCommands() []string {
 	return []string{
-		"status", "path", "workspace", "workspace ensure", "clone",
+		"status", "path", "workspace", "workspace ensure", "materialize",
 	}
 }
 
@@ -210,14 +210,14 @@ func All() []Var {
 		{
 			Name:     "PATH",
 			Scope:    ScopePlatform,
-			Summary:  "Process PATH; must include git for clone, status change probes, and default-branch ls-remote",
+			Summary:  "Process PATH; must include git for materialize, status change probes, and default-branch ls-remote",
 			Type:     TypeString,
 			Policy:   PolicyWarn,
 			Default:  "inherited process PATH",
 			External: true,
 			Global:   false,
 			HelpPrimary: true,
-			Commands: []string{"status", "clone"},
+			Commands: []string{"status", "materialize"},
 		},
 	}
 }
@@ -432,7 +432,7 @@ func FormatFullReference() string {
 	b.WriteString("PRJX (RFC 28) — not yerk product env\n")
 	b.WriteString("\n")
 	b.WriteString("    PRJX_* / PRJX__* names are defined by PRJX, not by yerk.\n")
-	b.WriteString("    yerk does not require them for near-term catalog/clone/status.\n")
+	b.WriteString("    yerk does not require them for near-term catalog/materialize/status.\n")
 	b.WriteString("    See .prjx-root, .config/_project-meta.toml, and salotz RFC 28.\n")
 	b.WriteString("    They are intentionally omitted from .appinfo/meta.toml [env.vars].\n")
 	b.WriteString("\n")

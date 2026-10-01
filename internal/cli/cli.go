@@ -15,6 +15,7 @@ import (
 	"github.com/salotz/yerk/internal/config"
 	"github.com/salotz/yerk/internal/envvars"
 	"github.com/salotz/yerk/internal/gitcmd"
+	"github.com/salotz/yerk/internal/id"
 	"github.com/salotz/yerk/internal/presence"
 	"github.com/salotz/yerk/internal/project"
 	"github.com/salotz/yerk/internal/version"
@@ -52,7 +53,7 @@ func NewRoot(streams IO) *cobra.Command {
 	root.AddCommand(newStatusCmd(streams))
 	root.AddCommand(newPathCmd(streams))
 	root.AddCommand(newWorkspaceCmd(streams))
-	root.AddCommand(newCloneCmd(streams))
+	root.AddCommand(newMaterializeCmd(streams))
 	root.AddCommand(newConfigCmd(streams))
 	root.AddCommand(newCatalogCmd(streams))
 	root.AddCommand(newEnvvarsCmd(streams))
@@ -70,8 +71,11 @@ func Execute(ctx context.Context, streams IO, args []string) error {
 const longHelp = `yerk is a host-level multi-project manager.
 
 It keeps a project catalog, materializes replicas into a workspace layout,
-resolves paths by name, and reports presence and change status.
+resolves paths by identifier, and reports presence and change status.
 Vocabulary aligns with PRJX (project, replica, workspace).
+
+Project identity (ADR 012): bare domain/name[/replica] or yerk://… URI.
+Short unique names expand; ambiguous short names error.
 
 Default files:
   Tool config:  $XDG_CONFIG_HOME/yerk/config.toml
@@ -149,7 +153,7 @@ fallback "main"). With --presence-only and no --network, default branch is
 catalog override or "main" only (no ls-remote).
 
 --tag must appear in the catalog's top-level tags list. Same selection model
-will apply to other bulk ops (workspace ensure, clone, …).`, "status"),
+will apply to other bulk ops (workspace ensure, materialize, …).`, "status"),
 		Args: cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if tagFilter != "" && len(args) > 0 {
@@ -187,28 +191,28 @@ will apply to other bulk ops (workspace ensure, clone, …).`, "status"),
 
 			fmt.Fprintf(streams.Out, "workspace.style=%s\n", res.Layout.Style)
 
-			// Replica-scoped: status <project> <replica>
-			if len(args) == 2 {
-				p, ok := cat.Find(args[0])
-				if !ok {
-					return fmt.Errorf("project %q not in catalog", args[0])
-				}
-				row, err := res.ReplicaStatus(cmd.Context(), p, args[1], opts)
+			if len(args) >= 1 {
+				p, ref, err := resolveProjectArgs(cat, args)
 				if err != nil {
 					return err
 				}
-				return printReplicaStatusTable(streams.Out, []api.ReplicaStatus{row}, withGit)
+				if ref.IsReplica() {
+					row, err := res.ReplicaStatus(cmd.Context(), p, ref.Replica, opts)
+					if err != nil {
+						return err
+					}
+					return printReplicaStatusTable(streams.Out, []api.ReplicaStatus{row}, withGit)
+				}
+				rows, err := res.ProjectStatuses(cmd.Context(), []config.Project{p}, opts)
+				if err != nil {
+					return err
+				}
+				return printProjectStatusTable(streams.Out, rows, withGit)
 			}
 
-			// Project list or single project
+			// Project list (all or --tag)
 			var projects []config.Project
 			switch {
-			case len(args) == 1:
-				p, ok := cat.Find(args[0])
-				if !ok {
-					return fmt.Errorf("project %q not in catalog", args[0])
-				}
-				projects = []config.Project{p}
 			case tagFilter != "":
 				projects, err = cat.SelectByTag(tagFilter)
 				if err != nil {
@@ -250,13 +254,16 @@ func newPathCmd(streams IO) *cobra.Command {
 		Short:   "Print the project workspace path, or a replica path when given",
 		Long: withEnv(`Resolve on-disk paths for a catalog project (no side effects).
 
-  yerk path <project>           → project workspace directory
-  yerk path <project> <replica> → that replica's checkout path
+  yerk path <project-id>                  → project workspace directory
+  yerk path <project-id> <replica>        → that replica's checkout path
+  yerk path <project-id>/<replica>        → replica path (id form)
+  yerk path yerk://domain/name[/replica]  → same via canonical URI
 
+Project id: short unique name, domain/name, or yerk://… (ADR 012).
 Workspace is catalog path relative to [domains.<domain>] (or absolute).
 Style places the replica under the workspace (workspace-dir: <workspace>/<replica>).
 
-Default replica is not implied: pass the distinguisher explicitly (e.g. main).`, "path"),
+Default replica is not implied for identity: pass the distinguisher explicitly.`, "path"),
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
@@ -267,17 +274,17 @@ Default replica is not implied: pass the distinguisher explicitly (e.g. main).`,
 			if err != nil {
 				return err
 			}
-			p, ok := cat.Find(args[0])
-			if !ok {
-				return fmt.Errorf("project %q not in catalog", args[0])
+			p, ref, err := resolveProjectArgs(cat, args)
+			if err != nil {
+				return err
 			}
 			res, err := project.NewResolver(cfg, gitcmd.New())
 			if err != nil {
 				return err
 			}
 			var path string
-			if len(args) == 2 {
-				path, err = res.ReplicaPath(p, args[1])
+			if ref.IsReplica() {
+				path, err = res.ReplicaPath(p, ref.Replica)
 			} else {
 				path, err = res.WorkspacePath(p)
 			}
@@ -297,11 +304,11 @@ func newWorkspaceCmd(streams IO) *cobra.Command {
 		Short: "Project workspace operations (layout dirs; not git checkouts)",
 		Long: withEnv(`Operate on project workspace directories (the folders that own replicas).
 
-Subcommands materialize or inspect layout only. They do not create replica
-checkouts — use yerk clone for that.
+Subcommands create or inspect layout only. They do not create replica
+checkouts — use yerk materialize for that.
 
-  yerk workspace ensure <project>...   mkdir named project workspace dirs
-  yerk workspace ensure --all          mkdir every catalog project workspace`, "workspace"),
+  yerk workspace ensure <project-id>...   mkdir named project workspace dirs
+  yerk workspace ensure --all             mkdir every catalog project workspace`, "workspace"),
 		RunE: requireSubcommand,
 	}
 	root.AddCommand(newWorkspaceEnsureCmd(streams))
@@ -312,7 +319,7 @@ func newWorkspaceEnsureCmd(streams IO) *cobra.Command {
 	var all bool
 	cmd := &cobra.Command{
 		Use:   "ensure [project...]",
-		Short: "Create project workspace directories (mkdir; no replica, no clone)",
+		Short: "Create project workspace directories (mkdir; no replica checkout)",
 		Long: withEnv(`Materialize project workspace directories (mkdir -p only).
 
 Creates the catalog project workspace path for each named project.
@@ -322,10 +329,10 @@ leaf (…/yerk/main).
 With --all, ensure every project in the catalog. Bare ensure with no names
 and no --all is an error (bulk mkdir is opt-in).
 
-Never deletes. Does not create replica directories and does not run git clone.
+Never deletes. Does not create replica directories and does not run git.
 Does not need git or --network.
 
-See also: yerk path <project>, yerk clone <project>.`, "workspace ensure"),
+See also: yerk path <project>, yerk materialize <project>.`, "workspace ensure"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if all && len(args) > 0 {
 				return errors.New("workspace ensure: pass project names or --all, not both")
@@ -352,12 +359,12 @@ See also: yerk path <project>, yerk clone <project>.`, "workspace ensure"),
 			for _, p := range projects {
 				path, err := res.WorkspacePath(p)
 				if err != nil {
-					return fmt.Errorf("%s: %w", p.Name, err)
+					return fmt.Errorf("%s: %w", p.ID(), err)
 				}
 				if err := workspace.EnsureDir(path); err != nil {
 					return err
 				}
-				fmt.Fprintf(streams.Out, "ensured %s -> %s\n", p.Name, path)
+				fmt.Fprintf(streams.Out, "ensured %s -> %s\n", p.ID(), path)
 			}
 			return nil
 		},
@@ -366,7 +373,7 @@ See also: yerk path <project>, yerk clone <project>.`, "workspace ensure"),
 	return cmd
 }
 
-func newCloneCmd(streams IO) *cobra.Command {
+func newMaterializeCmd(streams IO) *cobra.Command {
 	var (
 		replicaFlag string
 		tagFilter   string
@@ -374,23 +381,27 @@ func newCloneCmd(streams IO) *cobra.Command {
 		network     bool
 	)
 	cmd := &cobra.Command{
-		Use:   "clone [project [replica]]",
-		Short: "Materialize replica(s) by cloning project remote(s)",
-		Long: withEnv(`Materialize replica checkouts by cloning catalog project remotes.
+		Use:   "materialize [project [replica]]",
+		Short: "Materialize replica(s) from project remote(s) via git clone",
+		Long: withEnv(`Materialize replica checkouts from catalog project remotes (git clone under the hood).
 
-Single project:
-  yerk clone <project> [replica]
-  yerk clone <project> --replica <name>
+Product command is materialize (no top-level clone alias). Session spin-out
+(worktree vs clone method) is a later replica create command.
+
+Single project (id forms: short unique name, domain/name, yerk://…):
+  yerk materialize <project-id> [replica]
+  yerk materialize <project-id> --replica <name>
+  yerk materialize <project-id>/<replica>
 
 Bulk (opt-in; mutually exclusive selectors):
-  yerk clone --all
-  yerk clone --tag <name>
+  yerk materialize --all
+  yerk materialize --tag <name>
 
-Bulk clones each selected project's default replica unless --replica is set
-(same distinguisher applied to every selected project). Bare clone with no
+Bulk materializes each selected project's default replica unless --replica is set
+(same distinguisher applied to every selected project). Bare materialize with no
 names and no --all/--tag is an error.
 
-If the destination is already a usable git checkout (presence=present), clone
+If the destination is already a usable git checkout (presence=present), materialize
 skips git and reports that the replica is already present (still prints the
 path). A path that exists but is not a usable checkout (invalid) remains an
 error. Missing destinations are cloned as usual.
@@ -401,10 +412,10 @@ resolves the remote default branch via git ls-remote --symref (then catalog
 default_replica / "main").
 
 --tag must be a declared catalog tag. Unknown tags error. A declared tag
-with zero matching projects is an error for clone (empty mutate selection).
+with zero matching projects is an error for materialize (empty mutate selection).
 --all with an empty catalog is an error.
 
-Requires git on PATH.`, "clone"),
+Requires git on PATH.`, "materialize"),
 		Args: cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
@@ -415,7 +426,7 @@ Requires git on PATH.`, "clone"),
 			if err != nil {
 				return err
 			}
-			projects, sharedReplica, err := resolveCloneSelection(cat, args, all, tagFilter, replicaFlag)
+			projects, sharedReplica, err := resolveMaterializeSelection(cat, args, all, tagFilter, replicaFlag)
 			if err != nil {
 				return err
 			}
@@ -428,7 +439,7 @@ Requires git on PATH.`, "clone"),
 			var firstErr error
 			okCount := 0
 			for _, p := range projects {
-				if err := cloneOne(ctx, streams, res, git, p, sharedReplica, network); err != nil {
+				if err := materializeOne(ctx, streams, res, git, p, sharedReplica, network); err != nil {
 					fmt.Fprintf(streams.Err, "error: %v\n", err)
 					if firstErr == nil {
 						firstErr = err
@@ -439,7 +450,7 @@ Requires git on PATH.`, "clone"),
 			}
 			if firstErr != nil {
 				if okCount > 0 {
-					return fmt.Errorf("clone: %d ok, with errors: %w", okCount, firstErr)
+					return fmt.Errorf("materialize: %d ok, with errors: %w", okCount, firstErr)
 				}
 				return firstErr
 			}
@@ -447,46 +458,47 @@ Requires git on PATH.`, "clone"),
 		},
 	}
 	cmd.Flags().StringVar(&replicaFlag, "replica", "", "Replica distinguisher / branch (default: per-project remote HEAD)")
-	cmd.Flags().StringVar(&tagFilter, "tag", "", "Clone every project with this declared catalog tag")
-	cmd.Flags().BoolVar(&all, "all", false, "Clone every project in the catalog")
+	cmd.Flags().StringVar(&tagFilter, "tag", "", "Materialize every project with this declared catalog tag")
+	cmd.Flags().BoolVar(&all, "all", false, "Materialize every project in the catalog")
 	cmd.Flags().BoolVar(&network, "network", true, "Resolve default branch via git ls-remote when replica omitted")
 	return cmd
 }
 
 // cloneOne materializes one project's replica. If the path is already a
 // usable checkout, it reports already-present and succeeds without git clone.
-func cloneOne(ctx context.Context, streams IO, res project.Resolver, git gitcmd.Runner, p config.Project, sharedReplica string, network bool) error {
+func materializeOne(ctx context.Context, streams IO, res project.Resolver, git gitcmd.Runner, p config.Project, sharedReplica string, network bool) error {
+	label := p.ID()
 	if strings.TrimSpace(p.Remote) == "" {
-		return fmt.Errorf("project %q has empty remote", p.Name)
+		return fmt.Errorf("project %q has empty remote", label)
 	}
 	replica := sharedReplica
 	var err error
 	if replica == "" {
 		replica, err = res.DefaultReplicaName(ctx, p, network)
 		if err != nil {
-			return fmt.Errorf("%s: %w", p.Name, err)
+			return fmt.Errorf("%s: %w", label, err)
 		}
 	}
 	path, err := res.ReplicaPath(p, replica)
 	if err != nil {
-		return fmt.Errorf("%s: %w", p.Name, err)
+		return fmt.Errorf("%s: %w", label, err)
 	}
 
 	switch presence.Classify(path) {
 	case presence.Present:
-		fmt.Fprintf(streams.Err, "already present %s replica %s -> %s\n", p.Name, replica, path)
+		fmt.Fprintf(streams.Err, "already present %s replica %s -> %s\n", label, replica, path)
 		fmt.Fprintln(streams.Out, path)
 		return nil
 	case presence.Invalid:
-		return fmt.Errorf("%s: replica path exists but is not a usable git checkout: %s", p.Name, path)
+		return fmt.Errorf("%s: replica path exists but is not a usable git checkout: %s", label, path)
 	}
 
 	if err := workspace.EnsureParents(path); err != nil {
-		return fmt.Errorf("%s: %w", p.Name, err)
+		return fmt.Errorf("%s: %w", label, err)
 	}
-	fmt.Fprintf(streams.Err, "cloning %s branch %s from %s -> %s\n", p.Name, replica, p.Remote, path)
+	fmt.Fprintf(streams.Err, "materializing %s branch %s from %s -> %s\n", label, replica, p.Remote, path)
 	if err := git.Clone(ctx, p.Remote, path, replica); err != nil {
-		return fmt.Errorf("%s: %w", p.Name, err)
+		return fmt.Errorf("%s: %w", label, err)
 	}
 	fmt.Fprintln(streams.Out, path)
 	return nil
@@ -495,7 +507,7 @@ func cloneOne(ctx context.Context, streams IO, res project.Resolver, git gitcmd.
 // resolveCloneSelection picks projects and an optional shared replica name.
 // Modes (XOR): single/multi handled as single project+optional replica args,
 // --all, or --tag. Mutate empty selection is an error.
-func resolveCloneSelection(cat config.Catalog, args []string, all bool, tag, replicaFlag string) ([]config.Project, string, error) {
+func resolveMaterializeSelection(cat config.Catalog, args []string, all bool, tag, replicaFlag string) ([]config.Project, string, error) {
 	replicaFlag = strings.TrimSpace(replicaFlag)
 	tag = strings.TrimSpace(tag)
 	nSel := 0
@@ -509,10 +521,10 @@ func resolveCloneSelection(cat config.Catalog, args []string, all bool, tag, rep
 		nSel++
 	}
 	if nSel > 1 {
-		return nil, "", errors.New("clone: pass project args, --all, or --tag, not a combination")
+		return nil, "", errors.New("materialize: pass project args, --all, or --tag, not a combination")
 	}
 	if nSel == 0 {
-		return nil, "", errors.New("clone: name a project, or pass --all or --tag")
+		return nil, "", errors.New("materialize: name a project, or pass --all or --tag")
 	}
 
 	if all {
@@ -528,30 +540,67 @@ func resolveCloneSelection(cat config.Catalog, args []string, all bool, tag, rep
 			return nil, "", err
 		}
 		if len(projects) == 0 {
-			return nil, "", fmt.Errorf("clone: no projects matched tag %q", tag)
+			return nil, "", fmt.Errorf("materialize: no projects matched tag %q", tag)
 		}
 		return projects, replicaFlag, nil
 	}
 
-	// Positional: clone <project> [replica]
 	if len(args) == 0 {
-		return nil, "", errors.New("clone: name a project, or pass --all or --tag")
+		return nil, "", errors.New("materialize: name a project, or pass --all or --tag")
 	}
 	if len(args) > 2 {
-		return nil, "", errors.New("clone: too many arguments (use --all or --tag for bulk)")
+		return nil, "", errors.New("materialize: too many arguments (use --all or --tag for bulk)")
 	}
-	p, ok := cat.Find(args[0])
-	if !ok {
-		return nil, "", fmt.Errorf("project %q not in catalog", args[0])
+	p, ref, err := resolveProjectArgs(cat, args)
+	if err != nil {
+		return nil, "", err
 	}
 	replica := replicaFlag
-	if len(args) == 2 {
-		if replicaFlag != "" && replicaFlag != args[1] {
-			return nil, "", errors.New("clone: pass replica as argument or --replica, not both with different values")
+	if ref.IsReplica() {
+		if replicaFlag != "" && replicaFlag != ref.Replica {
+			return nil, "", errors.New("materialize: pass replica as argument or --replica, not both with different values")
 		}
-		replica = args[1]
+		replica = ref.Replica
 	}
 	return []config.Project{p}, replica, nil
+}
+
+
+// resolveProjectArgs expands CLI project args into a catalog row + id.Ref.
+// Accepts one arg (id may include replica) or two args (project id + replica).
+func resolveProjectArgs(cat config.Catalog, args []string) (config.Project, id.Ref, error) {
+	if len(args) == 0 {
+		return config.Project{}, id.Ref{}, errors.New("project identifier required")
+	}
+	if len(args) > 2 {
+		return config.Project{}, id.Ref{}, errors.New("too many arguments")
+	}
+	p, ref, err := cat.Resolve(args[0])
+	if err != nil {
+		return config.Project{}, id.Ref{}, err
+	}
+	if len(args) == 2 {
+		rep := strings.TrimSpace(args[1])
+		if rep == "" {
+			return config.Project{}, id.Ref{}, errors.New("empty replica distinguisher")
+		}
+		if ref.IsReplica() && ref.Replica != rep {
+			return config.Project{}, id.Ref{}, fmt.Errorf("replica specified twice with different values (%q vs %q)", ref.Replica, rep)
+		}
+		if err := validateReplicaSegment(rep); err != nil {
+			return config.Project{}, id.Ref{}, err
+		}
+		ref.Replica = rep
+	}
+	return p, ref, nil
+}
+
+func validateReplicaSegment(s string) error {
+	r, err := id.Parse(s)
+	if err != nil || r.Domain != "" || r.Replica != "" {
+		return fmt.Errorf("invalid replica distinguisher %q", s)
+	}
+	return nil
 }
 
 func newConfigCmd(streams IO) *cobra.Command {
@@ -704,8 +753,9 @@ func requireSubcommand(cmd *cobra.Command, args []string) error {
 	return fmt.Errorf("%s: subcommand required", cmd.CommandPath())
 }
 
-// selectProjects returns catalog rows for the given names, or the full catalog
-// when all is true. Caller must already enforce names XOR all.
+// selectProjects returns catalog rows for the given identifiers, or the full
+// catalog when all is true. Caller must already enforce names XOR all.
+// Each name is expanded via Catalog.Resolve (short / bare / URI).
 func selectProjects(cat config.Catalog, names []string, all bool) ([]config.Project, error) {
 	if all {
 		if len(cat.Projects) == 0 {
@@ -719,11 +769,20 @@ func selectProjects(cat config.Catalog, names []string, all bool) ([]config.Proj
 		return nil, errors.New("no projects selected")
 	}
 	var out []config.Project
+	seen := make(map[string]struct{}, len(names))
 	for _, name := range names {
-		p, ok := cat.Find(name)
-		if !ok {
-			return nil, fmt.Errorf("project %q not in catalog", name)
+		p, ref, err := cat.Resolve(name)
+		if err != nil {
+			return nil, err
 		}
+		if ref.IsReplica() {
+			return nil, fmt.Errorf("%q: workspace selection is project-scoped (omit replica segment)", name)
+		}
+		pid := p.ID()
+		if _, dup := seen[pid]; dup {
+			continue
+		}
+		seen[pid] = struct{}{}
 		out = append(out, p)
 	}
 	return out, nil

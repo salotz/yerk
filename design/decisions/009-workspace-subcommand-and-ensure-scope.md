@@ -46,7 +46,7 @@ Future workspace-only operations go under `yerk workspace …`.
 - **Do not** create the replica distinguisher leaf (`…/main`).
 - **Do not** run git, resolve default branch, or take `--network`.
 
-Replica checkout paths are created by `yerk clone` (parents via
+Replica checkout paths are created by `yerk materialize` (parents via
 `EnsureParents`, leaf by `git clone`) or left missing until then.
 
 ### Internal helpers

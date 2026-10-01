@@ -57,14 +57,15 @@ It speaks PRJX vocabulary; it does not redefine the PRJX spec.
 | List / show states | status (read model) | `yerk status [project [replica]]` [`--tag`]; change on by default (`--presence-only` opt-out) |
 | Path math only | resolve | `yerk path` (alias: `resolve`); bare name → workspace, +replica → checkout |
 | Create project workspace dir | materialize workspace | `yerk workspace ensure <proj>…` or `--all` (later also `--tag`) |
-| Create replica via git | materialize replica | `yerk clone <proj> [replica]` \| `--all` \| `--tag` |
+| Create replica via git | materialize replica | `yerk materialize <id> [replica]` \| `--all` \| `--tag` |
 | Read git state | probe change status | part of status (opt-out flag); not a separate default verb |
 | Universal read | get resource | later: `yerk get <kind> …` over API resources |
 | Sync | pull / push | later — **design semantics first** (no stub CLI) |
 | Apply host-local files | stage locals | later |
 
 Materialize **workspace** (`yerk workspace ensure`) and materialize **replica**
-(`yerk clone`) are always separate steps in the model.
+(`yerk materialize`) are always separate steps in the model. Product CLI does
+not use a top-level `clone` command (git still runs `git clone` under the hood).
 
 ### Project selection (bulk)
 
@@ -73,34 +74,36 @@ Commands that act on **many** projects share one selection model (ADR 010):
 | Selector | Meaning | Near-term |
 | --- | --- | --- |
 | (default / all catalog) | Every `[[projects]]` row | `yerk status` with no `--tag` |
-| `--tag <name>` | Projects that list declared tag `<name>` | `status --tag`; `clone --tag` |
-| project name args | Explicit subset | `workspace ensure <proj>…`, `clone <proj>` |
-| `--all` | Explicit full catalog (opt-in bulk mutate) | `workspace ensure --all`, `clone --all` |
+| `--tag <name>` | Projects that list declared tag `<name>` | `status --tag`; `materialize --tag` |
+| project id args | Explicit subset (ADR 012 forms) | `workspace ensure <id>…`, `materialize <id>` |
+| `--all` | Explicit full catalog (opt-in bulk mutate) | `workspace ensure --all`, `materialize --all` |
 
 Rules:
 
 - `<name>` for `--tag` must appear in catalog root `tags` (unknown → error).
 - Declared tag with zero projects → empty match (not an error) for **read** ops
-  (`status`); **mutate** ops (`clone`) refuse empty selection.
+  (`status`); **mutate** ops (`materialize`) refuse empty selection.
 - For mutate commands that support bulk: project args, `--all`, and `--tag` are
   mutually exclusive (one selector). Names and `--all` also exclusive on
   `workspace ensure` (ADR 009); ensure still lacks `--tag`.
-- Implementation path: `Catalog.SelectByTag` + `selectProjects` / clone
+- Implementation path: `Catalog.SelectByTag` + `selectProjects` / materialize
   selection helper.
 
 ---
 
 ## Identity
 
-Near-term:
+Canonical forms (ADR 012):
 
 ```text
-project:  <name>                      # catalog key
-ref:      <name>[/<distinguisher>]    # default distinguisher if omitted
-fq hint:  <domain>.<name>             # display / future PRJX align; not required in paths yet
+project:  <domain>/<name>             # bare id; catalog fields domain + name
+          yerk://<domain>/<name>      # canonical URI
+replica:  <domain>/<name>/<replica>
+          yerk://<domain>/<name>/<replica>
+short:    <name> or <name>/<replica>  # unique short name expands; else error
 ```
 
-Default replica distinguisher when omitted:
+Default replica distinguisher when omitted (operation policy, not id expand):
 
 1. Optional per-project override in catalog (`default_replica`), else
 2. Remote default branch short name (`git ls-remote --symref <uri> HEAD`), else
@@ -199,8 +202,9 @@ partly ecosystem-pattern learning):
   universal `yerk get`, alternate backends (files today → DB later) without
   rewriting command logic.
 
-See plan P5–P6 in `.agents/plans/near-term.md`. Push/pull stay blocked on a
-dedicated semantics design (P9) so project vs replica sync is not confusing.
+Push/pull stay blocked on a dedicated semantics design so project vs replica
+sync is not confusing. Active implementation coordination lives under
+ephemeral `.agents/plans/<owner>/` (not durable product docs).
 
 ---
 
@@ -358,4 +362,4 @@ process scaling limits after parallelization.
 - [decisions/](./decisions/) — ADRs (esp. 003 XDG, 004 config vs catalog, 005 CLI help / envvars)
 - [../docs/](../docs/) — operator/user docs (Diátaxis; ad hoc Markdown, [ADR 006](./decisions/006-ad-hoc-docs-diataxis.md))
 - [../.appinfo/meta.toml](../.appinfo/meta.toml) — application info + env registry (RFC 030/031)
-- [../.agents/plans/near-term.md](../.agents/plans/near-term.md) — implementation plan
+- [../.agents/plans/](../.agents/plans/) — ephemeral implementation plans (owner folders)
