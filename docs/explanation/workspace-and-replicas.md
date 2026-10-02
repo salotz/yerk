@@ -16,9 +16,11 @@ git are separate steps (`workspace ensure` vs `materialize`).
 - Project workspace owns replicas; not a git checkout
 - **Effective style** merges layers (built-in → host → dir-local → catalog → **host state** → env → CLI) — ADR 013
 - Host state: `$XDG_STATE_HOME/yerk/projects/<domain>/<project>/state.json`
-- First successful `workspace ensure` or `materialize` binds style
+- First successful `workspace ensure`, `materialize`, or `replica create` binds style
 - Style places the replica (`workspace-dir` / `project-dir`; `name-tags` later)
-- `yerk workspace ensure` creates workspace dirs only; `yerk materialize` clones replicas
+- `yerk workspace ensure` creates workspace dirs only
+- `yerk materialize` clones replicas from the **remote** (bootstrap; already-present ok)
+- `yerk replica create` spins a session replica: **worktree** from main (default) or **clone** method (ADR 016); refuse if dest present; worktree hard-errors if main missing
 
 ## See also
 

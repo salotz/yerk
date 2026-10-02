@@ -116,6 +116,63 @@ func TestCloneAndDefaultBranch(t *testing.T) {
 	}
 }
 
+func TestWorktreeAddNewAndExistingBranch(t *testing.T) {
+	requireGit(t)
+	main := t.TempDir()
+	initRepo(t, main)
+	r := gitcmd.New()
+	ctx := context.Background()
+
+	// New branch from HEAD.
+	wt1 := filepath.Join(t.TempDir(), "feat")
+	if err := r.WorktreeAdd(ctx, main, wt1, "feat"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(wt1, "README")); err != nil {
+		t.Fatal(err)
+	}
+	res, err := r.Probe(ctx, wt1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Branch != "feat" {
+		t.Fatalf("branch %q", res.Branch)
+	}
+
+	// Existing branch: create second worktree name on same branch is refused by git
+	// if branch is already checked out; use another new branch instead, then
+	// re-attach after removing first worktree is heavy — just refuse non-empty dest.
+	wt2 := filepath.Join(t.TempDir(), "feat2")
+	if err := r.WorktreeAdd(ctx, main, wt2, "feat2"); err != nil {
+		t.Fatal(err)
+	}
+	// Refuse non-empty / existing dest.
+	if err := r.WorktreeAdd(ctx, main, wt2, "feat3"); err == nil {
+		t.Fatal("expected refuse existing dest")
+	}
+}
+
+func TestWorktreeAddExistingBranch(t *testing.T) {
+	requireGit(t)
+	main := t.TempDir()
+	initRepo(t, main)
+	// Create branch without checking it out, so worktree can attach.
+	runGit(t, main, "branch", "topic")
+	r := gitcmd.New()
+	ctx := context.Background()
+	wt := filepath.Join(t.TempDir(), "topic-wt")
+	if err := r.WorktreeAdd(ctx, main, wt, "topic"); err != nil {
+		t.Fatal(err)
+	}
+	res, err := r.Probe(ctx, wt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Branch != "topic" {
+		t.Fatalf("branch %q", res.Branch)
+	}
+}
+
 func TestParseFlagsDisplay(t *testing.T) {
 	t.Parallel()
 	p := gitcmd.ProbeResult{Clean: true, Ahead: 2}

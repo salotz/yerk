@@ -51,17 +51,17 @@ Do not put operator answers here (use [decisions.md](./decisions.md)).
 - [x] Follow-up: omit missing `state.json` from files list
 - [x] Follow-up: `yerk state update` explicit rebind (not “lock”)
 
-## Phase 5 — materialize + replica create  **← next**
+## Phase 5 — materialize + replica create
 
 - [x] Rename `yerk clone` → `yerk materialize` (no alias)
 - [x] Docs/help/tests/examples updated for materialize
-- [ ] ADR: `replica create` method, prerequisites, idempotency
-- [ ] `gitcmd` worktree add
-- [ ] `yerk replica create` worktree + clone-method paths
-- [ ] Hard error if main missing for worktree method
-- [ ] Tests with fake/real git as appropriate
+- [x] ADR 016: `replica create` method, prerequisites, idempotency
+- [x] `gitcmd` worktree add
+- [x] `yerk replica create` worktree + clone-method paths
+- [x] Hard error if main missing for worktree method
+- [x] Tests with fake/real git as appropriate
 
-## Phase 6 — Agent context dumps
+## Phase 6 — Agent context dumps  **← next**
 
 - [ ] `yerk context` / `yerk context dir [path]`
 - [ ] Compose get/lookup + resolve + static help

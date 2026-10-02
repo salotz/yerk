@@ -12,6 +12,7 @@ import (
 )
 
 func TestProjectAndReplicaInfo(t *testing.T) {
+	t.Setenv("YERK__STATE_DIR", filepath.Join(t.TempDir(), "state"))
 	root := t.TempDir()
 	ws := filepath.Join(root, "devel", "yerk")
 	rep := filepath.Join(ws, "main")
@@ -69,6 +70,7 @@ func TestProjectAndReplicaInfo(t *testing.T) {
 }
 
 func TestLookupPathWalkUp(t *testing.T) {
+	t.Setenv("YERK__STATE_DIR", filepath.Join(t.TempDir(), "state"))
 	root := t.TempDir()
 	ws := filepath.Join(root, "devel", "yerk")
 	rep := filepath.Join(ws, "main")
@@ -147,6 +149,7 @@ func TestLookupPathWalkUp(t *testing.T) {
 }
 
 func TestLookupLongestRootWins(t *testing.T) {
+	t.Setenv("YERK__STATE_DIR", filepath.Join(t.TempDir(), "state"))
 	root := t.TempDir()
 	// Nested workspaces: outer and inner projects.
 	outer := filepath.Join(root, "tree")

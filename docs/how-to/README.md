@@ -15,6 +15,7 @@ Publication remains ad hoc plain Markdown
 | --- | --- | --- |
 | [Add a project to the catalog](./add-a-project.md) | Stub | Register a project by editing `catalog.toml` |
 | [Materialize a default replica](./materialize-a-replica.md) | Stub | Materialize a checkout with `yerk materialize` |
+| [Create a session replica](./create-a-replica.md) | Stub | `yerk replica create` (worktree \| clone) |
 | [Check presence and change status](./check-status.md) | Stub | `yerk status` (change on; `--presence-only`) |
 | [Get project or replica info](./get-project-info.md) | Draft | `yerk get` / `lookup` (+ noun forms); `--output json` |
 | [Explain placement](./explain-placement.md) | Draft | `yerk config resolve` — why is my style X? |

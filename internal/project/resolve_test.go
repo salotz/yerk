@@ -34,6 +34,14 @@ func (f fakeGit) Clone(ctx context.Context, remote, dest, branch string) error {
 	return nil
 }
 
+func (f fakeGit) WorktreeAdd(ctx context.Context, mainRepo, dest, branch string) error {
+	return nil
+}
+
+func (f fakeGit) EnsureBranch(ctx context.Context, repoPath, branch string) error {
+	return nil
+}
+
 func (f fakeGit) Probe(ctx context.Context, repoPath string) (gitcmd.ProbeResult, error) {
 	if f.err != nil {
 		return gitcmd.ProbeResult{}, f.err
@@ -56,7 +64,87 @@ func hostProjects(root string, pairs ...string) []config.HostProject {
 	return out
 }
 
+// isolateState points YERK__STATE_DIR at a temp tree so tests never touch
+// the operator's real XDG state (permission / pollution).
+func isolateState(t *testing.T) {
+	t.Helper()
+	t.Setenv("YERK__STATE_DIR", filepath.Join(t.TempDir(), "state"))
+}
+
+func TestResolveReplicaMethod(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		cli, cat, want string
+		err            bool
+	}{
+		{"", "", project.MethodWorktree, false},
+		{"", "clone", project.MethodClone, false},
+		{"worktree", "clone", project.MethodWorktree, false},
+		{"clone", "", project.MethodClone, false},
+		{"nope", "", "", true},
+	}
+	for _, tc := range cases {
+		got, err := project.ResolveReplicaMethod(tc.cli, tc.cat)
+		if tc.err {
+			if err == nil {
+				t.Fatalf("cli=%q cat=%q: want err", tc.cli, tc.cat)
+			}
+			continue
+		}
+		if err != nil || got != tc.want {
+			t.Fatalf("cli=%q cat=%q: got %q %v want %q", tc.cli, tc.cat, got, err, tc.want)
+		}
+	}
+}
+
+func TestCreateReplicaWorktreeRequiresMain(t *testing.T) {
+	isolateState(t)
+	root := t.TempDir()
+	cfg := config.Config{
+		Workspace: config.Workspace{Style: "workspace-dir"},
+		Projects:  hostProjects(root, "personal/yerk", "devel/yerk"),
+	}
+	r, err := project.NewResolver(cfg, fakeGit{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := config.Project{Name: "yerk", Domain: "personal", Remote: "x", DefaultReplica: "main"}
+	_, err = r.CreateReplica(context.Background(), p, "feat", project.CreateReplicaOptions{})
+	if err == nil {
+		t.Fatal("expected main missing error")
+	}
+	if !strings.Contains(err.Error(), "main replica") || !strings.Contains(err.Error(), "materialize") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestCreateReplicaRefusePresent(t *testing.T) {
+	isolateState(t)
+	root := t.TempDir()
+	feat := filepath.Join(root, "devel", "yerk", "feat")
+	if err := os.MkdirAll(filepath.Join(feat, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Config{
+		Workspace: config.Workspace{Style: "workspace-dir"},
+		Projects:  hostProjects(root, "personal/yerk", "devel/yerk"),
+	}
+	r, err := project.NewResolver(cfg, fakeGit{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := config.Project{Name: "yerk", Domain: "personal", Remote: "x", DefaultReplica: "main"}
+	_, err = r.CreateReplica(context.Background(), p, "feat", project.CreateReplicaOptions{Method: project.MethodClone})
+	if err == nil {
+		t.Fatal("expected already present error")
+	}
+	if !strings.Contains(err.Error(), "already present") {
+		t.Fatalf("got %v", err)
+	}
+}
+
 func TestStatusPresenceOnly(t *testing.T) {
+	isolateState(t)
 	root := t.TempDir()
 	yerkWS := filepath.Join(root, "devel", "yerk")
 	yerkReplica := filepath.Join(yerkWS, "main")
@@ -117,6 +205,7 @@ func TestStatusPresenceOnly(t *testing.T) {
 }
 
 func TestProjectStatus(t *testing.T) {
+	isolateState(t)
 	root := t.TempDir()
 	yerkWS := filepath.Join(root, "devel", "yerk")
 	yerkReplica := filepath.Join(yerkWS, "main")
@@ -173,6 +262,7 @@ func TestProjectStatus(t *testing.T) {
 }
 
 func TestReplicaStatusNamed(t *testing.T) {
+	isolateState(t)
 	root := t.TempDir()
 	feature := filepath.Join(root, "devel", "yerk", "feature")
 	if err := os.MkdirAll(filepath.Join(feature, ".git"), 0o755); err != nil {
@@ -202,6 +292,7 @@ func TestReplicaStatusNamed(t *testing.T) {
 }
 
 func TestStatusRequiresProjectPath(t *testing.T) {
+	isolateState(t)
 	cfg := config.Config{Workspace: config.Workspace{Style: "workspace-dir"}}
 	r, err := project.NewResolver(cfg, fakeGit{})
 	if err != nil {

@@ -482,19 +482,87 @@ Paths under a replica still resolve to the owning project.`, "project lookup"),
 func newReplicaCmd(streams IO) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "replica",
-		Short: "Replica-scoped get and lookup",
-		Long: withEnv(`Replica-scoped reads (ADR 015).
+		Short: "Replica get, lookup, and create",
+		Long: withEnv(`Replica-scoped commands (ADR 015, ADR 016).
 
   yerk replica get <project-id> <replica>
   yerk replica get <project-id>/<replica>
   yerk replica lookup <path>
+  yerk replica create <project-id> <replica>
+  yerk replica create <project-id>/<replica>
 
-Universal forms: yerk get, yerk lookup.`, "replica"),
+Universal reads: yerk get, yerk lookup.
+Bootstrap from remote: yerk materialize (not create).`, "replica"),
 		RunE: requireSubcommand,
 	}
 	root.AddCommand(newReplicaGetCmd(streams))
 	root.AddCommand(newReplicaLookupCmd(streams))
+	root.AddCommand(newReplicaCreateCmd(streams))
 	return root
+}
+
+func newReplicaCreateCmd(streams IO) *cobra.Command {
+	var (
+		methodFlag string
+		styleFlag  string
+	)
+	cmd := &cobra.Command{
+		Use:   "create <project-id> [replica]",
+		Short: "Create a replica checkout (worktree or clone method)",
+		Long: withEnv(`Spin out a new replica under the project workspace layout (ADR 016).
+
+  yerk replica create <project-id> <replica>
+  yerk replica create <project-id>/<replica>
+  yerk replica create yerk://domain/name/replica
+
+Methods:
+  worktree (default) — git worktree add from the main replica hub
+  clone              — git clone of the catalog remote at the style path
+
+Method sources (CLI wins): --method → catalog replica_method → worktree.
+
+worktree requires the main replica (default_replica or "main") to already be
+present. Materialize main first if missing — create does not auto-bootstrap.
+
+Replica distinguisher is required (no default expansion). Destination must not
+already be a usable checkout (refuse; unlike materialize's already-present ok).
+
+--workspace-style is explicit placement for this invoke (errors if contradicts
+bound state). On success, binds host project state on first init.
+
+Prints the absolute replica path on stdout.
+
+See also: yerk materialize, yerk replica get, yerk path.`, "replica create"),
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, cat, res, err := loadResolver(streams)
+			if err != nil {
+				return err
+			}
+			res.CLIStyle = styleFlag
+			p, ref, err := resolveProjectArgs(cat, args)
+			if err != nil {
+				return err
+			}
+			if !ref.IsReplica() {
+				return errors.New("replica create: replica distinguisher required (id third segment or second argument)")
+			}
+			ctx := cmd.Context()
+			result, err := res.CreateReplica(ctx, p, ref.Replica, project.CreateReplicaOptions{
+				Method:   methodFlag,
+				CLIStyle: styleFlag,
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(streams.Err, "created %s replica %s via %s -> %s\n", p.ID(), ref.Replica, result.Method, result.Path)
+			fmt.Fprintln(streams.Out, result.Path)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&methodFlag, "method", "", "Replica method: worktree|clone (default: catalog or worktree)")
+	cmd.Flags().StringVar(&styleFlag, "workspace-style", "", "Explicit workspace style (errors if contradicts bound state)")
+	return cmd
 }
 
 func newReplicaGetCmd(streams IO) *cobra.Command {
@@ -768,7 +836,7 @@ func newMaterializeCmd(streams IO) *cobra.Command {
 		Long: withEnv(`Materialize replica checkouts from catalog project remotes (git clone under the hood).
 
 Product command is materialize (no top-level clone alias). Session spin-out
-(worktree vs clone method) is a later replica create command.
+(worktree vs clone method) is yerk replica create (ADR 016).
 
 Single project (id forms: short unique name, domain/name, yerk://…):
   yerk materialize <project-id> [replica]

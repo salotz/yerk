@@ -1133,6 +1133,177 @@ tags = ["devel"]
 	}
 }
 
+func TestReplicaCreateWorktreeAndClone(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	domainRoot := filepath.Join(dir, "personal")
+	remote := filepath.Join(dir, "remotes", "a.git")
+	initFileRemote(t, remote)
+
+	alphaWS := filepath.Join(domainRoot, "devel", "alpha")
+	cfg := []byte(`[workspace]
+style = "workspace-dir"
+
+[[projects]]
+name = "alpha"
+domain = "personal"
+path = "` + alphaWS + `"
+`)
+	cat := []byte(`
+tags = []
+
+[[projects]]
+name = "alpha"
+domain = "personal"
+remote = "` + remote + `"
+default_replica = "main"
+`)
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), cfg, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	setYerkHostEnv(t, dir)
+
+	var out, errBuf bytes.Buffer
+	streams := cli.IO{Out: &out, Err: &errBuf}
+
+	// worktree without main → hard error
+	err := cli.Execute(context.Background(), streams, []string{"replica", "create", "alpha", "feat"})
+	if err == nil {
+		t.Fatal("expected main missing error")
+	}
+	if !strings.Contains(err.Error(), "main replica") {
+		t.Fatalf("got %v", err)
+	}
+
+	// materialize main hub
+	out.Reset()
+	errBuf.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"materialize", "alpha"}); err != nil {
+		t.Fatalf("materialize main: %v\n%s", err, errBuf.String())
+	}
+	mainPath := filepath.Join(alphaWS, "main")
+
+	// worktree create
+	out.Reset()
+	errBuf.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"replica", "create", "alpha", "feat"}); err != nil {
+		t.Fatalf("replica create worktree: %v\n%s", err, errBuf.String())
+	}
+	featPath := filepath.Join(alphaWS, "feat")
+	if strings.TrimSpace(out.String()) != featPath {
+		t.Fatalf("out=%q want %q", out.String(), featPath)
+	}
+	if !strings.Contains(errBuf.String(), "worktree") {
+		t.Fatalf("stderr should mention worktree\n%s", errBuf.String())
+	}
+	if _, err := os.Stat(filepath.Join(featPath, ".git")); err != nil {
+		t.Fatalf("feat worktree missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(mainPath, ".git")); err != nil {
+		t.Fatalf("main should remain: %v", err)
+	}
+
+	// refuse already present
+	out.Reset()
+	errBuf.Reset()
+	err = cli.Execute(context.Background(), streams, []string{"replica", "create", "alpha/feat"})
+	if err == nil {
+		t.Fatal("expected already present error")
+	}
+	if !strings.Contains(err.Error(), "already present") {
+		t.Fatalf("got %v", err)
+	}
+
+	// clone method (independent remote checkout)
+	out.Reset()
+	errBuf.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{
+		"replica", "create", "alpha", "other", "--method", "clone",
+	}); err != nil {
+		t.Fatalf("replica create clone: %v\n%s", err, errBuf.String())
+	}
+	otherPath := filepath.Join(alphaWS, "other")
+	if strings.TrimSpace(out.String()) != otherPath {
+		t.Fatalf("out=%q want %q", out.String(), otherPath)
+	}
+	if !strings.Contains(errBuf.String(), "clone") {
+		t.Fatalf("stderr should mention clone\n%s", errBuf.String())
+	}
+	if _, err := os.Stat(filepath.Join(otherPath, ".git")); err != nil {
+		t.Fatalf("other clone missing: %v", err)
+	}
+}
+
+func TestReplicaCreateCatalogMethodAndUnknown(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	domainRoot := filepath.Join(dir, "personal")
+	remote := filepath.Join(dir, "remotes", "a.git")
+	initFileRemote(t, remote)
+
+	alphaWS := filepath.Join(domainRoot, "devel", "alpha")
+	cfg := []byte(`[workspace]
+style = "workspace-dir"
+
+[[projects]]
+name = "alpha"
+domain = "personal"
+path = "` + alphaWS + `"
+`)
+	cat := []byte(`
+tags = []
+
+[[projects]]
+name = "alpha"
+domain = "personal"
+remote = "` + remote + `"
+default_replica = "main"
+replica_method = "clone"
+`)
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), cfg, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	setYerkHostEnv(t, dir)
+
+	var out, errBuf bytes.Buffer
+	streams := cli.IO{Out: &out, Err: &errBuf}
+
+	// catalog method clone — no main required
+	if err := cli.Execute(context.Background(), streams, []string{"replica", "create", "personal/alpha/sess"}); err != nil {
+		t.Fatalf("create via catalog clone method: %v\n%s", err, errBuf.String())
+	}
+	sessPath := filepath.Join(alphaWS, "sess")
+	if strings.TrimSpace(out.String()) != sessPath {
+		t.Fatalf("out=%q want %q", out.String(), sessPath)
+	}
+	if !strings.Contains(errBuf.String(), "clone") {
+		t.Fatalf("stderr=%s", errBuf.String())
+	}
+
+	// unknown method
+	out.Reset()
+	errBuf.Reset()
+	err := cli.Execute(context.Background(), streams, []string{
+		"replica", "create", "alpha", "x", "--method", "nope",
+	})
+	if err == nil {
+		t.Fatal("expected unknown method")
+	}
+	if !strings.Contains(err.Error(), "unknown replica method") {
+		t.Fatalf("got %v", err)
+	}
+}
+
 // initFileRemote creates a non-bare git repo usable as a local file remote.
 func initFileRemote(t *testing.T, dir string) {
 	t.Helper()

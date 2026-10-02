@@ -108,8 +108,8 @@ not auto-clone main.
 
 ### Which commands take placement flags
 
-- **Mutate placement:** `materialize`, `workspace ensure`, later `replica create`
-  (style and/or method where relevant).
+- **Mutate placement:** `materialize`, `workspace ensure`, `replica create`
+  (style and/or method where relevant). See ADR 016 for create semantics.
 - **Read-only:** `status`, `path`, `get` / `lookup` / `config resolve` /
   `context` — **report** effective policy; do not change binding. `config
   resolve` lists state paths only when the binding file exists.

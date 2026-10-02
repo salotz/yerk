@@ -20,6 +20,12 @@ type Runner interface {
 	DefaultBranch(ctx context.Context, remote string) (string, error)
 	// Clone clones remote into dest at branch. dest must not exist or be empty.
 	Clone(ctx context.Context, remote, dest, branch string) error
+	// WorktreeAdd adds a worktree at dest for branch, rooted at mainRepo.
+	// If branch does not exist, it is created from mainRepo HEAD (-b).
+	// dest must not exist or be empty.
+	WorktreeAdd(ctx context.Context, mainRepo, dest, branch string) error
+	// EnsureBranch switches repoPath to branch, creating it from HEAD if needed.
+	EnsureBranch(ctx context.Context, repoPath, branch string) error
 	// Probe returns change-status flags for a present checkout.
 	Probe(ctx context.Context, repoPath string) (ProbeResult, error)
 }
@@ -166,6 +172,64 @@ func (c *CLI) Clone(ctx context.Context, remote, dest, branch string) error {
 	return err
 }
 
+// EnsureBranch checks out branch in repoPath, creating it from HEAD when missing.
+func (c *CLI) EnsureBranch(ctx context.Context, repoPath, branch string) error {
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return fmt.Errorf("ensure branch: empty name")
+	}
+	cur, err := c.run(ctx, repoPath, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return err
+	}
+	if cur == branch {
+		return nil
+	}
+	if _, err := c.run(ctx, repoPath, "show-ref", "--verify", "--quiet", "refs/heads/"+branch); err == nil {
+		_, err = c.run(ctx, repoPath, "checkout", branch)
+		return err
+	}
+	_, err = c.run(ctx, repoPath, "checkout", "-b", branch)
+	return err
+}
+
+// WorktreeAdd adds a linked worktree at dest for branch from mainRepo.
+// When branch already exists in mainRepo, attaches to it; otherwise creates
+// the branch from mainRepo HEAD (-b) then adds the worktree.
+func (c *CLI) WorktreeAdd(ctx context.Context, mainRepo, dest, branch string) error {
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return fmt.Errorf("worktree add: empty branch name")
+	}
+	if strings.TrimSpace(mainRepo) == "" {
+		return fmt.Errorf("worktree add: empty main repo path")
+	}
+	if err := ensureDestOK(dest); err != nil {
+		return err
+	}
+	parent := filepath.Dir(dest)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return err
+	}
+
+	// Does local branch exist?
+	exists := false
+	if _, err := c.run(ctx, mainRepo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch); err == nil {
+		exists = true
+	}
+
+	var args []string
+	if exists {
+		// Attach to existing branch: git worktree add <path> <branch>
+		args = []string{"worktree", "add", "--", dest, branch}
+	} else {
+		// New branch from HEAD: git worktree add -b <branch> <path>
+		args = []string{"worktree", "add", "-b", branch, "--", dest}
+	}
+	_, err := c.run(ctx, mainRepo, args...)
+	return err
+}
+
 func ensureDestOK(dest string) error {
 	fi, err := os.Stat(dest)
 	if err != nil {
@@ -175,18 +239,18 @@ func ensureDestOK(dest string) error {
 		return err
 	}
 	if !fi.IsDir() {
-		return fmt.Errorf("clone destination exists and is not a directory: %s", dest)
+		return fmt.Errorf("destination exists and is not a directory: %s", dest)
 	}
 	entries, err := os.ReadDir(dest)
 	if err != nil {
 		return err
 	}
 	if len(entries) > 0 {
-		return fmt.Errorf("clone destination is not empty: %s", dest)
+		return fmt.Errorf("destination is not empty: %s", dest)
 	}
-	// Empty dir: remove so git clone can create it.
+	// Empty dir: remove so git can create it.
 	if err := os.Remove(dest); err != nil {
-		return fmt.Errorf("prepare empty clone dest: %w", err)
+		return fmt.Errorf("prepare empty destination: %w", err)
 	}
 	return nil
 }

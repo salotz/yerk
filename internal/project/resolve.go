@@ -122,6 +122,141 @@ func (r Resolver) EffectivePlacement(p config.Project) (placement.Effective, err
 	return eff, err
 }
 
+// Replica method names (ADR 016).
+const (
+	MethodWorktree = "worktree"
+	MethodClone    = "clone"
+)
+
+// DefaultReplicaMethod is used when catalog and CLI leave method unset.
+const DefaultReplicaMethod = MethodWorktree
+
+// CreateReplicaOptions controls yerk replica create (ADR 016).
+type CreateReplicaOptions struct {
+	// Method is worktree|clone. Empty → catalog replica_method → DefaultReplicaMethod.
+	Method string
+	// CLIStyle is explicit --workspace-style (also set on Resolver.CLIStyle).
+	CLIStyle string
+}
+
+// CreateReplicaResult is the outcome of a successful create.
+type CreateReplicaResult struct {
+	Path   string
+	Method string
+	Main   string // main replica path when method is worktree; empty for clone
+}
+
+// ResolveReplicaMethod picks worktree|clone (CLI → catalog → default).
+func ResolveReplicaMethod(cliMethod, catalogMethod string) (string, error) {
+	m := strings.TrimSpace(cliMethod)
+	if m == "" {
+		m = strings.TrimSpace(catalogMethod)
+	}
+	if m == "" {
+		m = DefaultReplicaMethod
+	}
+	switch m {
+	case MethodWorktree, MethodClone:
+		return m, nil
+	default:
+		return "", fmt.Errorf("unknown replica method %q (want %s or %s)", m, MethodWorktree, MethodClone)
+	}
+}
+
+// CreateReplica spins out a new replica under the project layout (ADR 016).
+// Destination must not already be present; worktree requires main present.
+func (r Resolver) CreateReplica(ctx context.Context, p config.Project, replica string, opts CreateReplicaOptions) (CreateReplicaResult, error) {
+	replica = strings.TrimSpace(replica)
+	if replica == "" {
+		return CreateReplicaResult{}, fmt.Errorf("replica distinguisher required")
+	}
+	if opts.CLIStyle != "" {
+		r.CLIStyle = opts.CLIStyle
+	}
+
+	method, err := ResolveReplicaMethod(opts.Method, p.ReplicaMethod)
+	if err != nil {
+		return CreateReplicaResult{}, err
+	}
+
+	dest, err := r.ReplicaPath(p, replica)
+	if err != nil {
+		return CreateReplicaResult{}, err
+	}
+
+	switch presence.Classify(dest) {
+	case presence.Present:
+		return CreateReplicaResult{}, fmt.Errorf("replica %q already present at %s (refuse; no --if-absent yet)", replica, dest)
+	case presence.Invalid:
+		return CreateReplicaResult{}, fmt.Errorf("replica path exists but is not a usable git checkout: %s", dest)
+	}
+
+	// Missing path may still be an empty or non-empty non-git dir handled by gitcmd.
+	if err := workspace.EnsureParents(dest); err != nil {
+		return CreateReplicaResult{}, err
+	}
+
+	out := CreateReplicaResult{Path: dest, Method: method}
+
+	switch method {
+	case MethodWorktree:
+		mainName := strings.TrimSpace(p.DefaultReplica)
+		if mainName == "" {
+			mainName = FallbackReplica
+		}
+		mainPath, err := r.ReplicaPath(p, mainName)
+		if err != nil {
+			return CreateReplicaResult{}, err
+		}
+		out.Main = mainPath
+		switch presence.Classify(mainPath) {
+		case presence.Present:
+			// ok
+		case presence.Missing:
+			return CreateReplicaResult{}, fmt.Errorf(
+				"main replica %q is missing at %s; materialize it first (yerk materialize %s %s) before worktree create",
+				mainName, mainPath, p.ID(), mainName)
+		default:
+			return CreateReplicaResult{}, fmt.Errorf(
+				"main replica %q is not a usable git checkout at %s; fix or re-materialize before worktree create",
+				mainName, mainPath)
+		}
+		if replica == mainName {
+			return CreateReplicaResult{}, fmt.Errorf(
+				"cannot create worktree for main replica name %q; use yerk materialize for the hub checkout",
+				replica)
+		}
+		if r.Git == nil {
+			return CreateReplicaResult{}, fmt.Errorf("git runner required")
+		}
+		if err := r.Git.WorktreeAdd(ctx, mainPath, dest, replica); err != nil {
+			return CreateReplicaResult{}, err
+		}
+	case MethodClone:
+		if strings.TrimSpace(p.Remote) == "" {
+			return CreateReplicaResult{}, fmt.Errorf("project %q has empty remote", p.ID())
+		}
+		if r.Git == nil {
+			return CreateReplicaResult{}, fmt.Errorf("git runner required")
+		}
+		// Clone remote default HEAD (session names rarely exist on the remote),
+		// then ensure local branch matches the replica distinguisher (ADR 016).
+		if err := r.Git.Clone(ctx, p.Remote, dest, ""); err != nil {
+			return CreateReplicaResult{}, err
+		}
+		if err := r.Git.EnsureBranch(ctx, dest, replica); err != nil {
+			return CreateReplicaResult{}, err
+		}
+	default:
+		return CreateReplicaResult{}, fmt.Errorf("unknown replica method %q", method)
+	}
+
+	if err := r.BindOnInit(p); err != nil {
+		return CreateReplicaResult{}, fmt.Errorf("bind state: %w", err)
+	}
+	return out, nil
+}
+
 // BindOnInit writes host project state on first ensure/materialize (ADR 013).
 // No-op if already bound. Uses ambient init style (state skipped while computing).
 func (r Resolver) BindOnInit(p config.Project) error {

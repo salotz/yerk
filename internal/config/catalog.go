@@ -33,7 +33,7 @@ type Project struct {
 	DefaultReplica string `toml:"default_replica,omitempty"`
 	// WorkspaceStyle is an optional per-project ambient style override (ADR 013).
 	WorkspaceStyle string `toml:"workspace_style,omitempty"`
-	// ReplicaMethod is optional (worktree|clone); consumed by replica create later.
+	// ReplicaMethod is optional (worktree|clone); consumed by replica create (ADR 016).
 	ReplicaMethod string `toml:"replica_method,omitempty"`
 	// Tags group projects for bulk operations. Each entry must appear in
 	// Catalog.Tags (closed vocabulary).

@@ -33,6 +33,7 @@ a second full flag dump.
 - [How to check status](../how-to/check-status.md)
 - [How to get project info](../how-to/get-project-info.md)
 - [How to materialize a replica](../how-to/materialize-a-replica.md)
+- [How to create a replica](../how-to/create-a-replica.md)
 - [Identifiers](../explanation/identifiers.md)
 - [Catalog reference](./catalog.md)
 - [ADR 005](../../design/decisions/005-cli-help-and-envvars.md)
@@ -41,3 +42,4 @@ a second full flag dump.
 - [ADR 011](../../design/decisions/011-api-resources.md)
 - [ADR 012](../../design/decisions/012-identifiers-and-yerk-uri.md)
 - [ADR 015](../../design/decisions/015-get-and-lookup.md)
+- [ADR 016](../../design/decisions/016-replica-create.md)

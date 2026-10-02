@@ -6,9 +6,9 @@
 # and optional [[projects]] path overrides (ADR 014). Domain is the id
 # namespace (ADR 012); optional domain roots use the same string.
 #
-# Optional placement fields (ADR 013):
+# Optional placement fields (ADR 013 / 016):
 #   workspace_style = "project-dir"
-#   replica_method = "worktree"   # later: replica create
+#   replica_method = "worktree"   # or "clone" for yerk replica create
 #
 # Declare the closed tag vocabulary first (ADR 010).
 

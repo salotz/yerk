@@ -52,6 +52,7 @@ Materialize on-disk replica(s) for cataloged project(s) with `yerk materialize`
 
 ## See also
 
+- [How to create a session replica](./create-a-replica.md) (`replica create`)
 - [Commands reference](../reference/commands.md)
 - [Identifiers (explanation)](../explanation/identifiers.md)
 - [Workspace and replicas (explanation)](../explanation/workspace-and-replicas.md)

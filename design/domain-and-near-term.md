@@ -58,6 +58,7 @@ It speaks PRJX vocabulary; it does not redefine the PRJX spec.
 | Path math only | resolve | `yerk path` (alias: `resolve`); bare name → workspace, +replica → checkout |
 | Create project workspace dir | materialize workspace | `yerk workspace ensure <proj>…` or `--all` (later also `--tag`) |
 | Create replica via git | materialize replica | `yerk materialize <id> [replica]` \| `--all` \| `--tag` |
+| Session replica spin-out | create replica | `yerk replica create <id> <replica>` (`--method worktree\|clone`; ADR 016) |
 | Read git state | probe change status | part of status (opt-out flag); not a separate default verb |
 | Universal read | get / lookup | `yerk get <id>`; `yerk lookup <path>`; `project|replica get|lookup`; `--output json` (ADR 015) |
 | Explain placement | resolve config | `yerk config resolve <project-id>` (contribution stack; ADR 013) |
@@ -65,7 +66,9 @@ It speaks PRJX vocabulary; it does not redefine the PRJX spec.
 | Apply host-local files | stage locals | later |
 
 Materialize **workspace** (`yerk workspace ensure`) and materialize **replica**
-(`yerk materialize`) are always separate steps in the model. Product CLI does
+(`yerk materialize`) are always separate steps in the model. Session spin-out
+(`yerk replica create`) is a third path: worktree from main or clone-method
+from remote (not bulk materialize). Product CLI does
 not use a top-level `clone` command (git still runs `git clone` under the hood).
 
 ### Project selection (bulk)

@@ -61,4 +61,5 @@ personal = "~/tree/personal/devel"
 - [Configuration reference](./configuration.md)
 - [ADR 010](../../design/decisions/010-catalog-tag-vocabulary.md),
   [ADR 012](../../design/decisions/012-identifiers-and-yerk-uri.md),
-  [ADR 014](../../design/decisions/014-host-local-path-model.md)
+  [ADR 014](../../design/decisions/014-host-local-path-model.md),
+  [ADR 016](../../design/decisions/016-replica-create.md)
