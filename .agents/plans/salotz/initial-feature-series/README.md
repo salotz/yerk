@@ -24,8 +24,7 @@ no staging unless asked, answers only in `decisions.md`).
 | 4 | `config resolve` stack (P15) | **done** (`yerk config resolve`; placement.Explain + ConfigResolve) |
 | 5 | `materialize` + `replica create` (P11) | **next** (partial: materialize rename done; create pending) |
 | 6 | Agent context dumps (P16) | done |
-| 7 | New workspace styles (P12) | pending |
-| 8 | Polish (ensure `--tag`, output formats) | pending |
+| 7 | New workspace styles (P12) | done || 8 | Polish (ensure `--tag`, output formats) | pending |
 | 9 | Sync verbs design only | pending |
 | — | Parallel probes | **held** (owner backlog) |
 

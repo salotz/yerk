@@ -121,7 +121,7 @@ not auto-clone main.
 | --- | --- |
 | `workspace-dir` | shipped |
 | `project-dir` | shipped |
-| `name-tags` | name locked; path math in later style ADR / phase |
+| `name-tags` | shipped (ADR 018): bare main + `__` tags; optional main_dir/replica_dir |
 
 Unknown style names → **error** at resolve (clean failure until implemented).
 

@@ -22,6 +22,22 @@ git are separate steps (`workspace ensure` vs `materialize`).
 - `yerk materialize` clones replicas from the **remote** (bootstrap; already-present ok)
 - `yerk replica create` spins a session replica: **worktree** from main (default) or **clone** method (ADR 016); refuse if dest present; worktree hard-errors if main missing
 
+### Styles (path math)
+
+| Style | Main / default replica | Other replicas |
+| --- | --- | --- |
+| `workspace-dir` | `<workspace>/<replica>` | same pattern |
+| `project-dir` | `<parent>/<name>__<replica>` (siblings of workspace) | same |
+| `name-tags` | `<workspace>/<name>` (bare project dir) | `<workspace>/<name>__R` |
+
+`name-tags` optional params (catalog or host `[[projects]]` inline table):
+
+```toml
+workspace_style = { style = "name-tags", main_dir = "~/.bimker", replica_dir = "~/tree/…/bimker" }
+```
+
+See [ADR 018](../../design/decisions/018-name-tags-workspace-style.md).
+
 ## See also
 
 - [Configuration](../reference/configuration.md)

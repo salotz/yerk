@@ -45,6 +45,9 @@ remote = "git@github.com:example/example.git"
 tags = ["devel"]
 # default_replica = "main"
 # workspace_style = "workspace-dir"
+# workspace_style = "name-tags"
+# workspace_style = { style = "name-tags", main_dir = "~/.app", replica_dir = "~/tree/…/app" }
+# replica_method = "worktree"
 ```
 
 Host counterpart (paths stay out of the catalog):
@@ -62,4 +65,5 @@ personal = "~/tree/personal/devel"
 - [ADR 010](../../design/decisions/010-catalog-tag-vocabulary.md),
   [ADR 012](../../design/decisions/012-identifiers-and-yerk-uri.md),
   [ADR 014](../../design/decisions/014-host-local-path-model.md),
-  [ADR 016](../../design/decisions/016-replica-create.md)
+  [ADR 016](../../design/decisions/016-replica-create.md),
+  [ADR 018](../../design/decisions/018-name-tags-workspace-style.md)

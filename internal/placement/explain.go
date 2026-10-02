@@ -60,10 +60,27 @@ func Explain(in Input) (Report, error) {
 	}
 
 	var (
-		rep   Report
-		style = workspace.StyleWorkspaceDir
-		order int
+		rep    Report
+		style  = workspace.StyleWorkspaceDir
+		params config.StyleSpec
+		order  int
 	)
+
+	// applySpec updates ambient style name + optional params from a StyleSpec.
+	applySpec := func(spec config.StyleSpec, label string) {
+		if spec.Name() == "" {
+			return
+		}
+		style = spec.Name()
+		// Params replace ambient params when this layer supplies a full style.
+		// Name-only layers clear params so stale main_dir does not leak.
+		params = config.StyleSpec{
+			Style:      spec.Name(),
+			MainDir:    strings.TrimSpace(spec.MainDir),
+			ReplicaDir: strings.TrimSpace(spec.ReplicaDir),
+		}
+		_ = label
+	}
 
 	add := func(c Contribution) {
 		order++
@@ -76,6 +93,7 @@ func Explain(in Input) (Report, error) {
 			rep.Files = appendUnique(rep.Files, c.Path)
 		}
 		if c.Applies && c.Value != "" {
+			// Value is style name for contributions; params applied via applySpec.
 			style = c.Value
 			rep.Effective.Sources = append(rep.Effective.Sources, sourceLabel(c))
 		}
@@ -133,20 +151,29 @@ func Explain(in Input) (Report, error) {
 
 	// 3 catalog row
 	catPath, _ := config.CatalogPath()
-	catStyle := strings.TrimSpace(in.Project.WorkspaceStyle)
+	catSpec := in.Project.Style
+	if catSpec.IsZero() && strings.TrimSpace(in.Project.WorkspaceStyle) != "" {
+		catSpec = config.ParseStyleSpec(in.Project.WorkspaceStyle)
+	}
 	cc := Contribution{Layer: LayerCatalog, Path: catPath}
 	if in.Project.Name != "" {
 		cc.Note = "project " + in.Project.ID()
 	}
-	if catStyle != "" {
-		cc.Value = catStyle
+	if catSpec.Name() != "" {
+		cc.Value = catSpec.Name()
 		cc.Applies = true
+		if catSpec.HasParams() {
+			cc.Note = joinNote(cc.Note, catSpec.String())
+		}
 	} else {
 		cc.Note = joinNote(cc.Note, "no workspace_style on row")
 	}
 	add(cc)
+	if catSpec.Name() != "" {
+		applySpec(catSpec, LayerCatalog)
+	}
 
-	// 4 env
+	// 4 env (name only)
 	envStyle := strings.TrimSpace(lookup("YERK__WORKSPACE_STYLE"))
 	ec := Contribution{Layer: LayerEnv, Key: "workspaceStyle"}
 	if envStyle != "" {
@@ -157,22 +184,34 @@ func Explain(in Input) (Report, error) {
 		ec.Note = "YERK__WORKSPACE_STYLE unset"
 	}
 	add(ec)
+	if envStyle != "" {
+		applySpec(config.ParseStyleSpec(envStyle), LayerEnv)
+	}
 
 	// 5 host [[projects]] row
 	hpNote := "no host [[projects]] row"
-	var hpStyle string
+	var hpSpec config.StyleSpec
 	if hp, ok := in.Host.FindHostProject(in.Project.Domain, in.Project.Name); ok {
 		hpNote = "host [[projects]] " + hp.ID()
-		hpStyle = strings.TrimSpace(hp.WorkspaceStyle)
+		hpSpec = hp.Style
+		if hpSpec.IsZero() && strings.TrimSpace(hp.WorkspaceStyle) != "" {
+			hpSpec = config.ParseStyleSpec(hp.WorkspaceStyle)
+		}
 	}
 	hpc := Contribution{Layer: LayerHostProject, Path: hostPath, Note: hpNote}
-	if hpStyle != "" {
-		hpc.Value = hpStyle
+	if hpSpec.Name() != "" {
+		hpc.Value = hpSpec.Name()
 		hpc.Applies = true
+		if hpSpec.HasParams() {
+			hpc.Note = joinNote(hpc.Note, hpSpec.String())
+		}
 	} else if strings.HasPrefix(hpNote, "host") {
 		hpc.Note = joinNote(hpNote, "no workspace_style")
 	}
 	add(hpc)
+	if hpSpec.Name() != "" {
+		applySpec(hpSpec, LayerHostProject)
+	}
 
 	ambientStyle := style
 	ambientSource := lastSource(rep.Effective.Sources)
@@ -242,7 +281,18 @@ func Explain(in Input) (Report, error) {
 	if err := workspace.ValidateStyle(style); err != nil {
 		return Report{}, err
 	}
+	// Bound/CLI may have changed style name; keep ambient params only when
+	// they still match the effective style name.
+	if params.Name() != "" && params.Name() != style {
+		params = config.StyleSpec{Style: style}
+	} else {
+		params.Style = style
+	}
+	if err := workspace.ValidateStyleParams(style, params); err != nil {
+		return Report{}, err
+	}
 	rep.Effective.Style = style
+	rep.Effective.Params = params
 	return rep, nil
 }
 

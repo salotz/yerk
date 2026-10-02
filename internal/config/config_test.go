@@ -317,6 +317,65 @@ func TestCatalogValidateTags(t *testing.T) {
 	}
 }
 
+func TestLoadStyleSpecInlineTable(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.toml")
+	catPath := filepath.Join(dir, "catalog.toml")
+	if err := os.WriteFile(cfgPath, []byte(`
+[workspace]
+style = "workspace-dir"
+
+[domains]
+personal = "/tree/personal/devel"
+
+[[projects]]
+name = "bimker"
+domain = "personal"
+path = "/tree/personal/devel/bimker"
+workspace_style = { style = "name-tags", main_dir = "/home/u/.bimker", replica_dir = "/tree/personal/devel/bimker" }
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(catPath, []byte(`
+tags = []
+
+[[projects]]
+name = "bimker"
+domain = "personal"
+remote = "x"
+workspace_style = "name-tags"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("YERK__CONFIG_DIR", dir)
+	t.Setenv("YERK__CONFIG", "")
+	t.Setenv("YERK__CATALOG", "")
+	t.Setenv("YERK__WORKSPACE_STYLE", "")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Projects) != 1 {
+		t.Fatalf("%+v", cfg.Projects)
+	}
+	hp := cfg.Projects[0]
+	if hp.Style.Name() != "name-tags" || hp.Style.MainDir != "/home/u/.bimker" {
+		t.Fatalf("host style: %+v", hp.Style)
+	}
+	if hp.WorkspaceStyle != "name-tags" {
+		t.Fatalf("WorkspaceStyle mirror %q", hp.WorkspaceStyle)
+	}
+
+	cat, err := config.LoadCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cat.Projects[0].Style.Name() != "name-tags" || cat.Projects[0].WorkspaceStyle != "name-tags" {
+		t.Fatalf("catalog style: %+v", cat.Projects[0])
+	}
+}
+
 func TestLoadCatalogRejectsUndeclaredTag(t *testing.T) {
 	dir := t.TempDir()
 	catPath := filepath.Join(dir, "catalog.toml")

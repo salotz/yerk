@@ -215,6 +215,103 @@ func TestEnsureReplicaDir(t *testing.T) {
 	}
 }
 
+func TestNameTagsPathMath(t *testing.T) {
+	t.Parallel()
+	container := "/tree/personal/devel/projects"
+	layout, err := workspace.NewLayoutFull(workspace.StyleNameTags, hostCfg(workspace.StyleNameTags,
+		config.HostProject{Name: "wumpus", Domain: "personal", Path: container},
+	), config.StyleSpec{}, "main", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := config.Project{Name: "wumpus", Domain: "personal", DefaultReplica: "main"}
+	ws, err := layout.ProjectDir(p)
+	if err != nil || ws != container {
+		t.Fatalf("ws %q %v", ws, err)
+	}
+	main, err := layout.ReplicaDir(p, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if main != filepath.Join(container, "wumpus") {
+		t.Fatalf("main %q", main)
+	}
+	feat, err := layout.ReplicaDir(p, "feat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if feat != filepath.Join(container, "wumpus__feat") {
+		t.Fatalf("feat %q", feat)
+	}
+}
+
+func TestNameTagsParamsMainAndReplicaDir(t *testing.T) {
+	t.Parallel()
+	container := "/tree/personal/devel/bimker"
+	mainHome := "/home/u/.bimker"
+	layout, err := workspace.NewLayoutFull(workspace.StyleNameTags, hostCfg(workspace.StyleNameTags,
+		config.HostProject{Name: "bimker", Domain: "personal", Path: container},
+	), config.StyleSpec{
+		MainDir:    mainHome,
+		ReplicaDir: container,
+	}, "main", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := config.Project{Name: "bimker", Domain: "personal", DefaultReplica: "main"}
+	main, err := layout.ReplicaDir(p, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if main != mainHome {
+		t.Fatalf("main %q", main)
+	}
+	sess, err := layout.ReplicaDir(p, "sess")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sess != filepath.Join(container, "bimker__sess") {
+		t.Fatalf("sess %q", sess)
+	}
+}
+
+func TestNameTagsRejectsParamsOnOtherStyles(t *testing.T) {
+	t.Parallel()
+	_, err := workspace.NewLayoutFull(workspace.StyleWorkspaceDir, hostCfg(workspace.StyleWorkspaceDir),
+		config.StyleSpec{MainDir: "/x"}, "main", nil)
+	if err == nil {
+		t.Fatal("expected params error")
+	}
+}
+
+func TestListLiveReplicasNameTags(t *testing.T) {
+	root := t.TempDir()
+	container := filepath.Join(root, "projects")
+	main := filepath.Join(container, "wumpus")
+	feat := filepath.Join(container, "wumpus__feat")
+	for _, d := range []string{main, feat} {
+		if err := os.MkdirAll(filepath.Join(d, ".git"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(container, "notes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	layout, err := workspace.NewLayoutFull(workspace.StyleNameTags, hostCfg(workspace.StyleNameTags,
+		config.HostProject{Name: "wumpus", Domain: "personal", Path: container},
+	), config.StyleSpec{}, "main", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := layout.ListLiveReplicas(config.Project{Name: "wumpus", Domain: "personal", DefaultReplica: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] != "feat" || got[1] != "main" {
+		t.Fatalf("got %v", got)
+	}
+}
+
 func TestListLiveReplicasWorkspaceDir(t *testing.T) {
 	root := t.TempDir()
 	ws := filepath.Join(root, "yerk")

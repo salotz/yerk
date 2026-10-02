@@ -21,3 +21,4 @@ Architecture decision records for `yerk`.
 | [015](./015-get-and-lookup.md) | Project/replica get and path lookup |
 | [016](./016-replica-create.md) | Replica create (worktree \| clone method) |
 | [017](./017-agent-context-dumps.md) | Agent context dumps (`yerk context`) |
+| [018](./018-name-tags-workspace-style.md) | `name-tags` style path math + inline params |

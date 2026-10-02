@@ -148,6 +148,58 @@ func TestLookupPathWalkUp(t *testing.T) {
 	}
 }
 
+func TestLookupNameTags(t *testing.T) {
+	t.Setenv("YERK__STATE_DIR", filepath.Join(t.TempDir(), "state"))
+	root := t.TempDir()
+	container := filepath.Join(root, "projects")
+	main := filepath.Join(container, "wumpus")
+	feat := filepath.Join(container, "wumpus__feat")
+	deep := filepath.Join(feat, "src")
+	if err := os.MkdirAll(filepath.Join(main, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(feat, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(deep, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Config{
+		Workspace: config.Workspace{Style: "name-tags"},
+		Projects:  hostProjects(root, "personal/wumpus", "projects"),
+	}
+	// hostProjects joins root + relative — fix path to container
+	cfg.Projects = []config.HostProject{{
+		Domain: "personal", Name: "wumpus", Path: container,
+		WorkspaceStyle: "name-tags",
+		Style:          config.StyleSpec{Style: "name-tags"},
+	}}
+	r, err := project.NewResolver(cfg, fakeGit{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projects := []config.Project{{
+		Name: "wumpus", Domain: "personal", Remote: "x", DefaultReplica: "main",
+		WorkspaceStyle: "name-tags", Style: config.StyleSpec{Style: "name-tags"},
+	}}
+
+	got, err := r.LookupPath(projects, deep, project.LookupAny)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Replica == nil || got.Replica.Replica != "feat" {
+		t.Fatalf("want feat replica: %+v", got)
+	}
+
+	got, err = r.LookupPath(projects, main, project.LookupAny)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Replica == nil || got.Replica.Replica != "main" {
+		t.Fatalf("want main replica: %+v", got)
+	}
+}
+
 func TestLookupLongestRootWins(t *testing.T) {
 	t.Setenv("YERK__STATE_DIR", filepath.Join(t.TempDir(), "state"))
 	root := t.TempDir()

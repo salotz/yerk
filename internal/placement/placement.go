@@ -43,6 +43,9 @@ type Input struct {
 type Effective struct {
 	// Style is the workspace style name used for layout.
 	Style string
+	// Params are optional path parameters from the ambient layer that set style
+	// (ADR 018). Bound state overrides name only; params stay ambient.
+	Params config.StyleSpec
 	// Bound is true when host project state supplied the winning style.
 	Bound bool
 	// Warnings are ambient drift messages (state kept).

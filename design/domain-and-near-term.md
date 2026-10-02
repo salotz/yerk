@@ -59,6 +59,7 @@ It speaks PRJX vocabulary; it does not redefine the PRJX spec.
 | Create project workspace dir | materialize workspace | `yerk workspace ensure <proj>…` or `--all` (later also `--tag`) |
 | Create replica via git | materialize replica | `yerk materialize <id> [replica]` \| `--all` \| `--tag` |
 | Session replica spin-out | create replica | `yerk replica create <id> <replica>` (`--method worktree\|clone`; ADR 016) |
+| Workspace styles | layout path math | `workspace-dir`, `project-dir`, `name-tags` (+ optional main_dir/replica_dir; ADR 018) |
 | Read git state | probe change status | part of status (opt-out flag); not a separate default verb |
 | Universal read | get / lookup | `yerk get <id>`; `yerk lookup <path>`; `project|replica get|lookup`; `--output json` (ADR 015) |
 | Explain placement | resolve config | `yerk config resolve <project-id>` (contribution stack; ADR 013) |

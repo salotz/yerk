@@ -7,10 +7,11 @@ Work-process: agent-guidelines personal `work-process.md` (In Progress / Backlog
 
 ### initial-feature-series
 
-Next product feature series after the first vertical slice. **Phases 0–6 done**
+Next product feature series after the first vertical slice. **Phases 0–7 done**
 (ids/URI, placement, get/lookup, config resolve, materialize + replica create,
-agent context dumps). **Next: Phase 7 — additional workspace styles** (or
-Phase 8 polish). Plan: [./initial-feature-series/](./initial-feature-series/).
+context dumps, name-tags style). **Next: Phase 8 polish** (`ensure --tag`,
+shared `--output`) or Phase 9 sync design. Plan:
+[./initial-feature-series/](./initial-feature-series/).
 
 ## Backlog
 

@@ -31,8 +31,11 @@ type Project struct {
 	Remote string `toml:"remote"`
 	// DefaultReplica overrides remote HEAD branch short name when set (main replica).
 	DefaultReplica string `toml:"default_replica,omitempty"`
-	// WorkspaceStyle is an optional per-project ambient style override (ADR 013).
-	WorkspaceStyle string `toml:"workspace_style,omitempty"`
+	// WorkspaceStyle is an optional per-project ambient style name (ADR 013).
+	// Prefer Style for name+params (ADR 018); this mirrors Style.Name for callers.
+	WorkspaceStyle string `toml:"-"`
+	// Style is the optional ambient style override (string or params; ADR 018).
+	Style StyleSpec `toml:"-"`
 	// ReplicaMethod is optional (worktree|clone); consumed by replica create (ADR 016).
 	ReplicaMethod string `toml:"replica_method,omitempty"`
 	// Tags group projects for bulk operations. Each entry must appear in
@@ -81,10 +84,41 @@ func LoadCatalog() (Catalog, error) {
 	if err := toml.Unmarshal(data, &cat); err != nil {
 		return EmptyCatalog(), fmt.Errorf("parse catalog %s: %w", path, err)
 	}
+	if err := applyCatalogStyleSpecs(data, &cat); err != nil {
+		return EmptyCatalog(), fmt.Errorf("catalog %s: %w", path, err)
+	}
 	if err := cat.Validate(); err != nil {
 		return EmptyCatalog(), fmt.Errorf("catalog %s: %w", path, err)
 	}
 	return cat, nil
+}
+
+// applyCatalogStyleSpecs fills Project.Style from flexible workspace_style values.
+func applyCatalogStyleSpecs(data []byte, cat *Catalog) error {
+	var raw struct {
+		Projects []map[string]any `toml:"projects"`
+	}
+	if err := toml.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if len(raw.Projects) != len(cat.Projects) {
+		// Fall through: still try by index when counts match only.
+		return nil
+	}
+	for i := range cat.Projects {
+		row := raw.Projects[i]
+		v, ok := row["workspace_style"]
+		if !ok {
+			continue
+		}
+		spec, err := ParseStyleValue(v)
+		if err != nil {
+			return fmt.Errorf("project %q: %w", cat.Projects[i].ID(), err)
+		}
+		cat.Projects[i].Style = spec
+		cat.Projects[i].WorkspaceStyle = spec.Name()
+	}
+	return nil
 }
 
 // rejectLegacyProjectPaths fails if any catalog [[projects]] row still sets path=

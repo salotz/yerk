@@ -76,7 +76,11 @@ func (r Resolver) layoutFor(p config.Project) (workspace.Layout, placement.Effec
 	for _, w := range eff.Warnings {
 		r.warnf("warning: %s\n", w)
 	}
-	layout, err := workspace.NewLayoutStyle(eff.Style, r.Cfg, r.warnf)
+	def := strings.TrimSpace(p.DefaultReplica)
+	if def == "" {
+		def = FallbackReplica
+	}
+	layout, err := workspace.NewLayoutFull(eff.Style, r.Cfg, eff.Params, def, r.warnf)
 	if err != nil {
 		return workspace.Layout{}, placement.Effective{}, err
 	}

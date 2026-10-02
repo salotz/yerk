@@ -68,13 +68,14 @@ Do not put operator answers here (use [decisions.md](./decisions.md)).
 - [x] JSON stability note (`apiVersion: yerk/v1`) / ADR 017
 - [x] Golden tests; short agents how-to
 
-## Phase 7 — Additional workspace styles  **← next**
+## Phase 7 — Additional workspace styles
 
-- [ ] `name-tags` path math (container workspace; bare main; `__` siblings)
-- [ ] Parameterized inline `workspace_style` table (`style`, `main_dir`, `replica_dir`)
-- [ ] Table-driven layout; tests; no host-private paths in-repo
+- [x] `name-tags` path math (container workspace; bare main; `__` siblings)
+- [x] Parameterized inline `workspace_style` table (`style`, `main_dir`, `replica_dir`)
+- [x] Table-driven layout; tests; no host-private paths in-repo
+- [x] ADR 018
 
-## Phase 8 — Polish (interleave OK)
+## Phase 8 — Polish (interleave OK)  **← next**
 
 - [ ] `workspace ensure --tag` (XOR with names / `--all`)
 - [ ] `--output json|yaml|table` shared flag surface

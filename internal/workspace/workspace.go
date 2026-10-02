@@ -9,10 +9,13 @@
 //	2. host [[projects]] relative path → <domains[domain]>/<path>
 //	3. else → <domains[domain]>/<name>
 //
-// Effective style (ADR 013 placement merge) decides replica math:
+// Effective style (ADR 013/018 placement merge) decides replica math:
 //
-//	workspace-dir: <workspace>/<replica>           → …/yerk/main
+//	workspace-dir: <workspace>/<replica>              → …/yerk/main
 //	project-dir:   <dir(workspace)>/<name>__<replica> → …/yerk__main
+//	name-tags:     main = <workspace>/<name>
+//	               other = <workspace>/<name>__<replica>
+//	               optional main_dir / replica_dir params
 package workspace
 
 import (
@@ -29,14 +32,21 @@ import (
 const (
 	StyleWorkspaceDir = "workspace-dir"
 	StyleProjectDir   = "project-dir"
-	// StyleNameTags is reserved (path math in a later phase).
+	// StyleNameTags: bare main + __ tagged siblings (ADR 018).
 	StyleNameTags = "name-tags"
+	// NameTagSep separates project name from replica distinguisher under name-tags.
+	NameTagSep = "__"
 )
 
 // Layout holds workspace policy and host config for path lookup.
 type Layout struct {
 	Style string
 	Host  config.Config
+	// Params are optional style path parameters (ADR 018; name-tags).
+	Params config.StyleSpec
+	// DefaultReplica is the main distinguisher name (catalog default or "main").
+	// Used by name-tags so path math maps the main id to the bare project dir.
+	DefaultReplica string
 	// Warnf, if set, receives soft warnings (unused for path math today).
 	Warnf func(format string, args ...any)
 }
@@ -53,6 +63,11 @@ func NewLayout(cfg config.Config) (Layout, error) {
 
 // NewLayoutStyle builds a Layout with an explicit effective style (ADR 013).
 func NewLayoutStyle(style string, host config.Config, warnf func(string, ...any)) (Layout, error) {
+	return NewLayoutFull(style, host, config.StyleSpec{}, "", warnf)
+}
+
+// NewLayoutFull builds a Layout with style, optional params, and main distinguisher.
+func NewLayoutFull(style string, host config.Config, params config.StyleSpec, defaultReplica string, warnf func(string, ...any)) (Layout, error) {
 	style = strings.TrimSpace(style)
 	if style == "" {
 		style = StyleWorkspaceDir
@@ -60,27 +75,54 @@ func NewLayoutStyle(style string, host config.Config, warnf func(string, ...any)
 	if err := ValidateStyle(style); err != nil {
 		return Layout{}, err
 	}
-	return Layout{Style: style, Host: host, Warnf: warnf}, nil
+	if err := ValidateStyleParams(style, params); err != nil {
+		return Layout{}, err
+	}
+	def := strings.TrimSpace(defaultReplica)
+	if def == "" {
+		def = "main"
+	}
+	// Params carry dirs only; name comes from style argument.
+	params.Style = style
+	return Layout{
+		Style:          style,
+		Host:           host,
+		Params:         params,
+		DefaultReplica: def,
+		Warnf:          warnf,
+	}, nil
 }
 
 // ValidateStyle reports whether style is known for path math.
-// name-tags is recognized as locked but not implemented yet.
 func ValidateStyle(style string) error {
 	switch strings.TrimSpace(style) {
-	case StyleWorkspaceDir, StyleProjectDir:
+	case StyleWorkspaceDir, StyleProjectDir, StyleNameTags:
 		return nil
-	case StyleNameTags:
-		return fmt.Errorf("workspace style %q is not implemented yet (path math ships in a later phase)", StyleNameTags)
 	case "":
 		return fmt.Errorf("empty workspace style")
 	default:
-		return fmt.Errorf("unknown workspace style %q (want %s or %s)",
-			style, StyleWorkspaceDir, StyleProjectDir)
+		return fmt.Errorf("unknown workspace style %q (want %s, %s, or %s)",
+			style, StyleWorkspaceDir, StyleProjectDir, StyleNameTags)
+	}
+}
+
+// ValidateStyleParams rejects params on styles that do not accept them.
+func ValidateStyleParams(style string, params config.StyleSpec) error {
+	if !params.HasParams() {
+		return nil
+	}
+	switch strings.TrimSpace(style) {
+	case StyleNameTags:
+		return nil
+	case StyleWorkspaceDir, StyleProjectDir:
+		return fmt.Errorf("workspace style %q does not accept main_dir/replica_dir params (ADR 018)", style)
+	default:
+		return fmt.Errorf("workspace style %q: params not allowed", style)
 	}
 }
 
 // ProjectDir returns the absolute project workspace directory.
-// That directory owns the project's replicas under workspace-dir style.
+// That directory owns the project's replicas under workspace-dir / name-tags.
 func (l Layout) ProjectDir(p config.Project) (string, error) {
 	return l.projectWorkspace(p)
 }
@@ -88,10 +130,6 @@ func (l Layout) ProjectDir(p config.Project) (string, error) {
 // ReplicaDir returns the checkout path for one replica of a project.
 // replica is the distinguisher (often the default branch short name).
 func (l Layout) ReplicaDir(p config.Project, replica string) (string, error) {
-	ws, err := l.projectWorkspace(p)
-	if err != nil {
-		return "", err
-	}
 	replica = strings.TrimSpace(replica)
 	if replica == "" {
 		return "", fmt.Errorf("project %q: empty replica distinguisher", p.Name)
@@ -101,22 +139,73 @@ func (l Layout) ReplicaDir(p config.Project, replica string) (string, error) {
 		return "", fmt.Errorf("project %q: replica %q must be a single path segment", p.Name, replica)
 	}
 
+	ws, err := l.projectWorkspace(p)
+	if err != nil {
+		return "", err
+	}
+
 	switch l.Style {
 	case StyleWorkspaceDir:
 		return filepath.Join(ws, replica), nil
 	case StyleProjectDir:
-		name := strings.TrimSpace(p.Name)
-		if name == "" {
-			return "", fmt.Errorf("project has empty name (needed for %s layout)", StyleProjectDir)
-		}
-		if strings.ContainsAny(name, `/\`) {
-			return "", fmt.Errorf("project name %q must be a single path segment", name)
+		name, err := projectNameSegment(p)
+		if err != nil {
+			return "", err
 		}
 		parent := filepath.Dir(ws)
-		return filepath.Join(parent, name+"__"+replica), nil
+		return filepath.Join(parent, name+NameTagSep+replica), nil
+	case StyleNameTags:
+		return l.nameTagsReplicaDir(p, ws, replica)
 	default:
 		return "", fmt.Errorf("unknown workspace style %q", l.Style)
 	}
+}
+
+func (l Layout) nameTagsReplicaDir(p config.Project, ws, replica string) (string, error) {
+	name, err := projectNameSegment(p)
+	if err != nil {
+		return "", err
+	}
+	isMain := replica == l.DefaultReplica || replica == name
+
+	if isMain {
+		if md := strings.TrimSpace(l.Params.MainDir); md != "" {
+			return expandAbsParam("main_dir", md)
+		}
+		return filepath.Join(ws, name), nil
+	}
+
+	container := ws
+	if rd := strings.TrimSpace(l.Params.ReplicaDir); rd != "" {
+		var err error
+		container, err = expandAbsParam("replica_dir", rd)
+		if err != nil {
+			return "", err
+		}
+	}
+	return filepath.Join(container, name+NameTagSep+replica), nil
+}
+
+func expandAbsParam(key, raw string) (string, error) {
+	expanded, err := config.ExpandUser(strings.TrimSpace(raw))
+	if err != nil {
+		return "", fmt.Errorf("style param %s: %w", key, err)
+	}
+	if !filepath.IsAbs(expanded) {
+		return "", fmt.Errorf("style param %s must be absolute or ~/… (got %q)", key, raw)
+	}
+	return filepath.Clean(expanded), nil
+}
+
+func projectNameSegment(p config.Project) (string, error) {
+	name := strings.TrimSpace(p.Name)
+	if name == "" {
+		return "", fmt.Errorf("project has empty name (needed for layout path math)")
+	}
+	if strings.ContainsAny(name, `/\`) {
+		return "", fmt.Errorf("project name %q must be a single path segment", name)
+	}
+	return name, nil
 }
 
 func (l Layout) projectWorkspace(p config.Project) (string, error) {
@@ -133,6 +222,8 @@ func (l Layout) ListLiveReplicas(p config.Project) ([]string, error) {
 		return l.listLiveWorkspaceDir(p)
 	case StyleProjectDir:
 		return l.listLiveProjectDir(p)
+	case StyleNameTags:
+		return l.listLiveNameTags(p)
 	default:
 		return nil, fmt.Errorf("unknown workspace style %q", l.Style)
 	}
@@ -159,7 +250,6 @@ func (l Layout) listLiveWorkspaceDir(p config.Project) ([]string, error) {
 		if strings.ContainsAny(name, `/\`) {
 			continue
 		}
-		// Follow dir entries; also accept anything Classify can see (symlink checkout).
 		path := filepath.Join(ws, name)
 		if !isLiveCheckout(path) {
 			continue
@@ -175,11 +265,11 @@ func (l Layout) listLiveProjectDir(p config.Project) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	name := strings.TrimSpace(p.Name)
-	if name == "" {
-		return nil, fmt.Errorf("project has empty name (needed for %s layout)", StyleProjectDir)
+	name, err := projectNameSegment(p)
+	if err != nil {
+		return nil, err
 	}
-	prefix := name + "__"
+	prefix := name + NameTagSep
 	parent := filepath.Dir(ws)
 	entries, err := os.ReadDir(parent)
 	if err != nil {
@@ -208,9 +298,72 @@ func (l Layout) listLiveProjectDir(p config.Project) ([]string, error) {
 	return names, nil
 }
 
+func (l Layout) listLiveNameTags(p config.Project) ([]string, error) {
+	name, err := projectNameSegment(p)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]struct{}{}
+	var names []string
+	add := func(rep string) {
+		rep = strings.TrimSpace(rep)
+		if rep == "" {
+			return
+		}
+		if _, ok := seen[rep]; ok {
+			return
+		}
+		seen[rep] = struct{}{}
+		names = append(names, rep)
+	}
+
+	// Main checkout (bare name or main_dir).
+	mainPath, err := l.ReplicaDir(p, l.DefaultReplica)
+	if err == nil && isLiveCheckout(mainPath) {
+		add(l.DefaultReplica)
+	}
+
+	// Tagged siblings under replica container.
+	container, err := l.nameTagsTagContainer(p)
+	if err != nil {
+		return nil, err
+	}
+	prefix := name + NameTagSep
+	entries, err := os.ReadDir(container)
+	if err != nil {
+		if os.IsNotExist(err) {
+			sort.Strings(names)
+			return names, nil
+		}
+		return nil, fmt.Errorf("list name-tags container %s: %w", container, err)
+	}
+	for _, e := range entries {
+		ent := e.Name()
+		if !strings.HasPrefix(ent, prefix) {
+			continue
+		}
+		rep := strings.TrimPrefix(ent, prefix)
+		if rep == "" || strings.ContainsAny(rep, `/\`) {
+			continue
+		}
+		path := filepath.Join(container, ent)
+		if !isLiveCheckout(path) {
+			continue
+		}
+		add(rep)
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+func (l Layout) nameTagsTagContainer(p config.Project) (string, error) {
+	if rd := strings.TrimSpace(l.Params.ReplicaDir); rd != "" {
+		return expandAbsParam("replica_dir", rd)
+	}
+	return l.projectWorkspace(p)
+}
+
 func isLiveCheckout(path string) bool {
-	// Inline presence check without importing presence (avoid cycle).
-	// Match presence.Present: .git file or directory.
 	fi, err := os.Stat(path)
 	if err != nil || !fi.IsDir() {
 		return false
@@ -220,7 +373,6 @@ func isLiveCheckout(path string) bool {
 	if err != nil {
 		return false
 	}
-	// Directory or gitfile (worktree) both OK.
 	return gfi.IsDir() || gfi.Mode().IsRegular()
 }
 

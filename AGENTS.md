@@ -83,7 +83,9 @@ shell activation.
   `tags` must be members (ADR 010). Catalog edits are hand-edit for now.
   API resources (ADR 011, `internal/api`) carry canonical `uri`. Status
   UX: change on by default (`--presence-only`), origin comparison
-  fallback. Further series lives under ephemeral `.agents/plans/<owner>/`
+  fallback. Workspace styles: `workspace-dir`, `project-dir`, `name-tags`
+  (bare main + `__` tags; optional `main_dir`/`replica_dir` inline table;
+  ADR 018). Further series lives under ephemeral `.agents/plans/<owner>/`
   (do not cite plan-local Q ids in product code). `pull`/`push` only after
   sync semantics ADR.
 - **Examples vs host state (ADR 007):** portable samples live under

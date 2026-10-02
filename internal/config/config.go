@@ -79,8 +79,11 @@ type HostProject struct {
 	// Path is optional. Absolute or ~/… overrides placement; relative joins
 	// the domain root; empty uses default <domain-root>/<name>.
 	Path string `toml:"path,omitempty"`
-	// WorkspaceStyle is an optional host-row ambient style override (ADR 013).
-	WorkspaceStyle string `toml:"workspace_style,omitempty"`
+	// WorkspaceStyle is an optional host-row ambient style name (ADR 013).
+	// Prefer Style for name+params (ADR 018).
+	WorkspaceStyle string `toml:"-"`
+	// Style is the optional ambient style override (string or params; ADR 018).
+	Style StyleSpec `toml:"-"`
 }
 
 // ID returns the bare project identifier domain/name.
@@ -315,10 +318,40 @@ func Load() (Config, error) {
 	if err := toml.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("parse config %s: %w", path, err)
 	}
+	if err := applyHostStyleSpecs(data, &cfg); err != nil {
+		return cfg, fmt.Errorf("config %s: %w", path, err)
+	}
 	if err := cfg.ValidateHostProjects(); err != nil {
 		return cfg, fmt.Errorf("config %s: %w", path, err)
 	}
 	return applyEnv(cfg), nil
+}
+
+// applyHostStyleSpecs fills HostProject.Style from flexible workspace_style values.
+func applyHostStyleSpecs(data []byte, cfg *Config) error {
+	var raw struct {
+		Projects []map[string]any `toml:"projects"`
+	}
+	if err := toml.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if len(raw.Projects) != len(cfg.Projects) {
+		return nil
+	}
+	for i := range cfg.Projects {
+		row := raw.Projects[i]
+		v, ok := row["workspace_style"]
+		if !ok {
+			continue
+		}
+		spec, err := ParseStyleValue(v)
+		if err != nil {
+			return fmt.Errorf("host project %q: %w", cfg.Projects[i].ID(), err)
+		}
+		cfg.Projects[i].Style = spec
+		cfg.Projects[i].WorkspaceStyle = spec.Name()
+	}
+	return nil
 }
 
 func applyEnv(cfg Config) Config {

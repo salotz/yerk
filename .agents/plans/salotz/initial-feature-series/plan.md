@@ -404,16 +404,15 @@ only when operator reprioritizes.
 
 ## Immediate next step
 
-**Done this chunk:** Phase 6 — ADR 017; `yerk context` + `context dir`;
-ToolContext / DirContext API; compose lookup + placement + short status;
-tests + agents how-to. (Also earlier: multi-replica status overall.)
+**Done this chunk:** Phase 7 — ADR 018; `name-tags` path math; inline
+`workspace_style` table (`main_dir` / `replica_dir`); live list + lookup;
+tests + docs.
 
-**Next (default on go):** **Phase 7** — additional workspace styles
-(`name-tags` path math + parameterized table), **or** Phase 8 polish
-(`workspace ensure --tag`, shared `--output`).
+**Next (default on go):** **Phase 8 polish** — `workspace ensure --tag`,
+shared `--output json|yaml|table` (as scheduled).
 
 Alternates if operator widens scope:
 
-1. Phase 8 slice — `workspace ensure --tag` / broader `--output` formats  
-2. Phase 9 — sync verbs design only  
-3. Held — parallel change probes (only if reprioritized)
+1. Phase 9 — sync verbs design only  
+2. Held — parallel change probes (only if reprioritized)  
+3. Close-out / success criteria pass
