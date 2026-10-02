@@ -61,14 +61,14 @@ Do not put operator answers here (use [decisions.md](./decisions.md)).
 - [x] Hard error if main missing for worktree method
 - [x] Tests with fake/real git as appropriate
 
-## Phase 6 — Agent context dumps  **← next**
+## Phase 6 — Agent context dumps
 
-- [ ] `yerk context` / `yerk context dir [path]`
-- [ ] Compose get/lookup + resolve + static help
-- [ ] JSON stability note (`apiVersion: yerk/v1`)
-- [ ] Golden tests; short agents how-to
+- [x] `yerk context` / `yerk context dir [path]`
+- [x] Compose get/lookup + resolve + static help
+- [x] JSON stability note (`apiVersion: yerk/v1`) / ADR 017
+- [x] Golden tests; short agents how-to
 
-## Phase 7 — Additional workspace styles
+## Phase 7 — Additional workspace styles  **← next**
 
 - [ ] `name-tags` path math (container workspace; bare main; `__` siblings)
 - [ ] Parameterized inline `workspace_style` table (`style`, `main_dir`, `replica_dir`)

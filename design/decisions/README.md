@@ -20,3 +20,4 @@ Architecture decision records for `yerk`.
 | [014](./014-host-local-path-model.md) | Host-local path model (successor to 008) |
 | [015](./015-get-and-lookup.md) | Project/replica get and path lookup |
 | [016](./016-replica-create.md) | Replica create (worktree \| clone method) |
+| [017](./017-agent-context-dumps.md) | Agent context dumps (`yerk context`) |

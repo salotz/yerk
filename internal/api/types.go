@@ -12,6 +12,8 @@ const (
 	KindProjectInfo   = "ProjectInfo"
 	KindReplicaInfo   = "ReplicaInfo"
 	KindConfigResolve = "ConfigResolve"
+	KindToolContext   = "ToolContext"
+	KindDirContext    = "DirContext"
 )
 
 // Presence is on-disk presence of an expected path (replica checkout or,
@@ -224,6 +226,78 @@ type ProjectOverall struct {
 	ReplicaCount int `json:"replicaCount"`
 	// PresentCount is how many of those are presence=present.
 	PresentCount int `json:"presentCount"`
+}
+
+// ToolContext is a tool-wide agent dump (ADR 017): vocabulary, commands, host paths.
+type ToolContext struct {
+	// APIVersion is the resource API version (yerk/v1).
+	APIVersion string `json:"apiVersion"`
+	// Kind is always KindToolContext.
+	Kind string `json:"kind"`
+	// Version is the yerk version identity string.
+	Version string `json:"version,omitempty"`
+	// Vocabulary is short PRJX/yerk noun definitions.
+	Vocabulary []ContextTerm `json:"vocabulary,omitempty"`
+	// Commands maps primary verbs to one-line roles.
+	Commands []ContextCommand `json:"commands,omitempty"`
+	// Paths are resolved host directories/files for this process.
+	Paths ToolContextPaths `json:"paths"`
+	// EnvPrimary lists primary YERK__ knobs (names only; live values via envvars).
+	EnvPrimary []string `json:"envPrimary,omitempty"`
+	// HowTo are short task pointers (not full docs).
+	HowTo []string `json:"howTo,omitempty"`
+	// Notes are stability / usage caveats for agents.
+	Notes []string `json:"notes,omitempty"`
+}
+
+// ContextTerm is one vocabulary entry.
+type ContextTerm struct {
+	Term string `json:"term"`
+	Def  string `json:"def"`
+}
+
+// ContextCommand is one command map row.
+type ContextCommand struct {
+	Name string `json:"name"`
+	Role string `json:"role"`
+}
+
+// ToolContextPaths holds resolved XDG / config locations for this process.
+type ToolContextPaths struct {
+	ConfigDir   string `json:"configDir,omitempty"`
+	ConfigFile  string `json:"configFile,omitempty"`
+	CatalogFile string `json:"catalogFile,omitempty"`
+	StateDir    string `json:"stateDir,omitempty"`
+}
+
+// DirContext is a directory-scoped agent dump (ADR 017): lookup + placement + short status.
+type DirContext struct {
+	// APIVersion is the resource API version (yerk/v1).
+	APIVersion string `json:"apiVersion"`
+	// Kind is always KindDirContext.
+	Kind string `json:"kind"`
+	// Path is the absolute path that was resolved (cwd or argument).
+	Path string `json:"path"`
+	// Matched is "project" or "replica" when under a catalog workspace.
+	Matched string `json:"matched,omitempty"`
+	// Project is set when the path matched a project (and always when replica matched).
+	Project *ProjectInfo `json:"project,omitempty"`
+	// Replica is set when the path matched under a replica root.
+	Replica *ReplicaInfo `json:"replica,omitempty"`
+	// Placement is a compact effective placement snapshot.
+	Placement *PlacementInfo `json:"placement,omitempty"`
+	// EffectiveStyle is the winning workspace style (duplicate of placement.style for scanners).
+	EffectiveStyle string `json:"effectiveStyle,omitempty"`
+	// Bound is true when host project state supplied the winning style.
+	Bound bool `json:"bound,omitempty"`
+	// Warnings are placement ambient-drift messages.
+	Warnings []string `json:"warnings,omitempty"`
+	// StatusOverall is the project-level presence/change rollup when collected.
+	StatusOverall *ProjectOverall `json:"statusOverall,omitempty"`
+	// LiveReplicas lists distinguisher names discovered on disk (when collected).
+	LiveReplicas []string `json:"liveReplicas,omitempty"`
+	// Notes are short operator/agent hints for this dump.
+	Notes []string `json:"notes,omitempty"`
 }
 
 // ProjectStatus is a project-scoped status view (workspace + replicas + overall).

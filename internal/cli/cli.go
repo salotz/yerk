@@ -62,6 +62,7 @@ func NewRoot(streams IO) *cobra.Command {
 	root.AddCommand(newMaterializeCmd(streams))
 	root.AddCommand(newStateCmd(streams))
 	root.AddCommand(newConfigCmd(streams))
+	root.AddCommand(newContextCmd(streams))
 	root.AddCommand(newCatalogCmd(streams))
 	root.AddCommand(newEnvvarsCmd(streams))
 
@@ -86,6 +87,7 @@ Project identity (ADR 012): bare domain/name[/replica] or yerk://… URI.
 Short unique names expand; ambiguous short names error.
 
 Read one resource: yerk get <id>, yerk lookup <path> (--output json).
+Agent dumps: yerk context; yerk context dir [path].
 
 Default files:
   Tool config:  $XDG_CONFIG_HOME/yerk/config.toml
@@ -1270,6 +1272,170 @@ subcommand).`, "config"),
 	})
 	root.AddCommand(newConfigResolveCmd(streams))
 	return root
+}
+
+func newContextCmd(streams IO) *cobra.Command {
+	root := &cobra.Command{
+		Use:   "context",
+		Short: "Agent-oriented context dumps (tool or directory)",
+		Long: withEnv(`Dump structured context for agents and tools (ADR 017).
+
+  yerk context                 → tool vocabulary, commands, XDG paths
+  yerk context dir [path]      → where is this path? (cwd default)
+
+Human text by default; --output json for a single api resource
+(ToolContext or DirContext, apiVersion yerk/v1).
+
+Composes get/lookup + config resolve + short status — does not scrape markdown.
+JSON keys are best-effort stable under yerk/v1 (avoid casual renames).
+
+See docs/how-to/agent-context.md.`, "context"),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Bare `yerk context` is the tool dump (same as historical plan).
+			output, _ := cmd.Flags().GetString("output")
+			if err := validateOutputFlag(output); err != nil {
+				return err
+			}
+			tc, err := project.ToolContext()
+			if err != nil {
+				return err
+			}
+			return printToolContext(streams.Out, tc, output)
+		},
+	}
+	root.Flags().String("output", "", "Output format: json (default: human text)")
+	root.AddCommand(newContextDirCmd(streams))
+	return root
+}
+
+func newContextDirCmd(streams IO) *cobra.Command {
+	var (
+		output string
+		withGit bool
+	)
+	cmd := &cobra.Command{
+		Use:   "dir [path]",
+		Short: "Directory context: project/replica under path (cwd default)",
+		Long: withEnv(`Map a filesystem path to yerk project/replica context (ADR 017).
+
+  yerk context dir
+  yerk context dir .
+  yerk context dir /path/to/checkout
+  yerk context dir --output json
+
+Uses lookup (prefer replica), project info, compact placement, and a short
+project status overall (presence-oriented by default). Pass --git to include
+change probes in the overall rollup.
+
+Unknown path (not under any catalog workspace) → error.`, "context dir"),
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateOutputFlag(output); err != nil {
+				return err
+			}
+			_, cat, res, err := loadResolver(streams)
+			if err != nil {
+				return err
+			}
+			path := ""
+			if len(args) == 1 {
+				path = args[0]
+			}
+			dc, err := res.DirContext(cmd.Context(), cat.Projects, path, project.DirContextOptions{
+				Git:     withGit,
+				Network: withGit,
+			})
+			if err != nil {
+				return err
+			}
+			return printDirContext(streams.Out, dc, output)
+		},
+	}
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json (default: human text)")
+	cmd.Flags().BoolVar(&withGit, "git", false, "Include git change probes in status overall")
+	return cmd
+}
+
+func printToolContext(w io.Writer, tc api.ToolContext, output string) error {
+	if strings.TrimSpace(output) == "json" {
+		return writeJSON(w, tc)
+	}
+	fmt.Fprintf(w, "kind:\t%s\n", tc.Kind)
+	fmt.Fprintf(w, "apiVersion:\t%s\n", tc.APIVersion)
+	fmt.Fprintf(w, "version:\t%s\n", dash(tc.Version))
+	fmt.Fprintln(w, "paths:")
+	fmt.Fprintf(w, "  configDir:\t%s\n", dash(tc.Paths.ConfigDir))
+	fmt.Fprintf(w, "  configFile:\t%s\n", dash(tc.Paths.ConfigFile))
+	fmt.Fprintf(w, "  catalogFile:\t%s\n", dash(tc.Paths.CatalogFile))
+	fmt.Fprintf(w, "  stateDir:\t%s\n", dash(tc.Paths.StateDir))
+	fmt.Fprintln(w, "vocabulary:")
+	for _, t := range tc.Vocabulary {
+		fmt.Fprintf(w, "  %s:\t%s\n", t.Term, t.Def)
+	}
+	fmt.Fprintln(w, "commands:")
+	for _, c := range tc.Commands {
+		fmt.Fprintf(w, "  %s:\t%s\n", c.Name, c.Role)
+	}
+	if len(tc.EnvPrimary) > 0 {
+		fmt.Fprintf(w, "envPrimary:\t%s\n", strings.Join(tc.EnvPrimary, ", "))
+	}
+	if len(tc.HowTo) > 0 {
+		fmt.Fprintln(w, "howTo:")
+		for _, h := range tc.HowTo {
+			fmt.Fprintf(w, "  - %s\n", h)
+		}
+	}
+	if len(tc.Notes) > 0 {
+		fmt.Fprintln(w, "notes:")
+		for _, n := range tc.Notes {
+			fmt.Fprintf(w, "  - %s\n", n)
+		}
+	}
+	return nil
+}
+
+func printDirContext(w io.Writer, dc api.DirContext, output string) error {
+	if strings.TrimSpace(output) == "json" {
+		return writeJSON(w, dc)
+	}
+	fmt.Fprintf(w, "kind:\t%s\n", dc.Kind)
+	fmt.Fprintf(w, "apiVersion:\t%s\n", dc.APIVersion)
+	fmt.Fprintf(w, "path:\t%s\n", dc.Path)
+	fmt.Fprintf(w, "matched:\t%s\n", dash(dc.Matched))
+	if dc.Project != nil {
+		fmt.Fprintf(w, "project.uri:\t%s\n", dash(dc.Project.URI))
+		fmt.Fprintf(w, "project.name:\t%s\n", dc.Project.Name)
+		fmt.Fprintf(w, "project.domain:\t%s\n", dash(dc.Project.Domain))
+		fmt.Fprintf(w, "project.workspacePath:\t%s\n", dash(dc.Project.WorkspacePath))
+		fmt.Fprintf(w, "project.workspacePresence:\t%s\n", dash(string(dc.Project.WorkspacePresence)))
+	}
+	if dc.Replica != nil {
+		fmt.Fprintf(w, "replica.uri:\t%s\n", dash(dc.Replica.URI))
+		fmt.Fprintf(w, "replica.name:\t%s\n", dc.Replica.Replica)
+		fmt.Fprintf(w, "replica.path:\t%s\n", dash(dc.Replica.Path))
+		fmt.Fprintf(w, "replica.presence:\t%s\n", dash(string(dc.Replica.Presence)))
+	}
+	fmt.Fprintf(w, "effectiveStyle:\t%s\n", dash(dc.EffectiveStyle))
+	fmt.Fprintf(w, "bound:\t%t\n", dc.Bound)
+	if len(dc.Warnings) > 0 {
+		fmt.Fprintf(w, "warnings:\t%s\n", strings.Join(dc.Warnings, "; "))
+	}
+	if dc.StatusOverall != nil {
+		fmt.Fprintf(w, "statusOverall.presence:\t%s\n", dash(dc.StatusOverall.Presence))
+		fmt.Fprintf(w, "statusOverall.change:\t%s\n", dash(dc.StatusOverall.Change))
+		fmt.Fprintf(w, "statusOverall.replicaCount:\t%d\n", dc.StatusOverall.ReplicaCount)
+		fmt.Fprintf(w, "statusOverall.presentCount:\t%d\n", dc.StatusOverall.PresentCount)
+	}
+	if len(dc.LiveReplicas) > 0 {
+		fmt.Fprintf(w, "liveReplicas:\t%s\n", strings.Join(dc.LiveReplicas, ", "))
+	}
+	if len(dc.Notes) > 0 {
+		fmt.Fprintln(w, "notes:")
+		for _, n := range dc.Notes {
+			fmt.Fprintf(w, "  - %s\n", n)
+		}
+	}
+	return nil
 }
 
 func newConfigResolveCmd(streams IO) *cobra.Command {

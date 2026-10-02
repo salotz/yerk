@@ -63,7 +63,8 @@ shell activation.
 - Near-term CLI surface (implemented only; no stub commands): `status`,
   `path`/`resolve`, `get`, `lookup`, `project get|lookup`,
   `replica get|lookup|create`, `workspace ensure`, `materialize`, `config`,
-  `state update`, `catalog`, `envvars`, `version`. Project args accept bare
+  `context` / `context dir`, `state update`, `catalog`, `envvars`, `version`.
+  Project args accept bare
   id / short unique name / `yerk://…` (ADR 012; package `internal/id`).
   `domain` is required on every catalog project. `get`/`lookup` return
   project or replica info (placement + paths + presence); `--output json`

@@ -22,6 +22,9 @@ a second full flag dump.
 | `path` / `resolve` | Print workspace path, or replica path when distinguisher given | `path <id>` → workspace; `path <id> <replica>` or `id/replica` → checkout |
 | `workspace ensure` | Create project workspace dirs only | project ids required, or `--all`; no replica leaf; no git |
 | `materialize` | Materialize replica(s) from remote via git | `materialize <id> [replica]` \| `--all` \| `--tag`; optional `--replica`; already-present → ok; no `clone` alias |
+| `replica create` | Session spin-out (worktree \| clone method) | `replica create <id> <replica>`; `--method`; main required for worktree; refuse if dest present (ADR 016) |
+| `get` / `lookup` / `project` / `replica get\|lookup` | One-resource info | id or path; `--output json` (ADR 015) |
+| `context` / `context dir` | Agent dumps (tool or directory) | `--output json`; compose lookup + placement + short status (ADR 017) |
 | `config` | Tool config path / show / resolve | `config resolve <project-id>` placement stack; `--output json`; samples in `examples/` |
 | `state update` | Rebind host project state from ambient | project ids or `--all`; optional `--workspace-style`; creates or overwrites `state.json` |
 | `catalog` | Catalog path / show (table + declared tags) | samples in `examples/`; ADR 010 |
@@ -43,3 +46,5 @@ a second full flag dump.
 - [ADR 012](../../design/decisions/012-identifiers-and-yerk-uri.md)
 - [ADR 015](../../design/decisions/015-get-and-lookup.md)
 - [ADR 016](../../design/decisions/016-replica-create.md)
+- [ADR 017](../../design/decisions/017-agent-context-dumps.md)
+- [How to dump agent context](../how-to/agent-context.md)

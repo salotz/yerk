@@ -91,6 +91,22 @@ func NewConfigResolve() ConfigResolve {
 	}
 }
 
+// NewToolContext returns a ToolContext with TypeMeta fields set.
+func NewToolContext() ToolContext {
+	return ToolContext{
+		APIVersion: APIVersion,
+		Kind:       KindToolContext,
+	}
+}
+
+// NewDirContext returns a DirContext with TypeMeta fields set.
+func NewDirContext() DirContext {
+	return DirContext{
+		APIVersion: APIVersion,
+		Kind:       KindDirContext,
+	}
+}
+
 // Summary returns a compact ReplicaSummary from a full ReplicaStatus.
 func (r ReplicaStatus) Summary() ReplicaSummary {
 	return ReplicaSummary{

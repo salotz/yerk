@@ -404,15 +404,16 @@ only when operator reprioritizes.
 
 ## Immediate next step
 
-**Done this chunk:** Phase 5 remainder — ADR 016; `gitcmd.WorktreeAdd`;
-`yerk replica create` (worktree default + clone method); hard error if main
-missing for worktree; refuse dest present; tests + docs.
+**Done this chunk:** Phase 6 — ADR 017; `yerk context` + `context dir`;
+ToolContext / DirContext API; compose lookup + placement + short status;
+tests + agents how-to. (Also earlier: multi-replica status overall.)
 
-**Next (default on go):** **Phase 6** — agent `context` / `context dir` dumps
-(compose get/lookup + resolve + static help; JSON stability note).
+**Next (default on go):** **Phase 7** — additional workspace styles
+(`name-tags` path math + parameterized table), **or** Phase 8 polish
+(`workspace ensure --tag`, shared `--output`).
 
 Alternates if operator widens scope:
 
 1. Phase 8 slice — `workspace ensure --tag` / broader `--output` formats  
-2. Phase 7 — additional workspace styles  
-3. Phase 9 — sync verbs design only
+2. Phase 9 — sync verbs design only  
+3. Held — parallel change probes (only if reprioritized)

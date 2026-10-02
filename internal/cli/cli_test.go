@@ -1314,6 +1314,87 @@ replica_method = "clone"
 	}
 }
 
+func TestContextToolAndDir(t *testing.T) {
+	dir := t.TempDir()
+	domainRoot := filepath.Join(dir, "personal")
+	yerkWS := filepath.Join(domainRoot, "devel", "yerk")
+	yerkRep := filepath.Join(yerkWS, "main")
+	if err := os.MkdirAll(filepath.Join(yerkRep, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := []byte(`[workspace]
+style = "workspace-dir"
+
+[[projects]]
+name = "yerk"
+domain = "personal"
+path = "` + yerkWS + `"
+`)
+	cat := []byte(`
+tags = []
+
+[[projects]]
+name = "yerk"
+domain = "personal"
+remote = "git@example.com:x/yerk.git"
+default_replica = "main"
+`)
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), cfg, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	setYerkHostEnv(t, dir)
+
+	var out bytes.Buffer
+	streams := cli.IO{Out: &out, Err: &out}
+
+	if err := cli.Execute(context.Background(), streams, []string{"context"}); err != nil {
+		t.Fatalf("context: %v\n%s", err, out.String())
+	}
+	s := out.String()
+	if !strings.Contains(s, "ToolContext") && !strings.Contains(s, "kind:\tToolContext") {
+		t.Fatalf("tool context human:\n%s", s)
+	}
+	if !strings.Contains(s, "vocabulary:") || !strings.Contains(s, "catalog") {
+		t.Fatalf("expected vocabulary\n%s", s)
+	}
+	if !strings.Contains(s, dir) {
+		t.Fatalf("expected config dir path in output\n%s", s)
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"context", "--output", "json"}); err != nil {
+		t.Fatalf("context json: %v", err)
+	}
+	js := out.String()
+	if !strings.Contains(js, `"kind": "ToolContext"`) || !strings.Contains(js, `"apiVersion": "yerk/v1"`) {
+		t.Fatalf("json:\n%s", js)
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"context", "dir", yerkRep}); err != nil {
+		t.Fatalf("context dir: %v\n%s", err, out.String())
+	}
+	d := out.String()
+	if !strings.Contains(d, "matched:\treplica") || !strings.Contains(d, "yerk") {
+		t.Fatalf("dir human:\n%s", d)
+	}
+	if !strings.Contains(d, "liveReplicas:") || !strings.Contains(d, "main") {
+		t.Fatalf("expected live replicas\n%s", d)
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"context", "dir", yerkRep, "--output", "json"}); err != nil {
+		t.Fatalf("context dir json: %v", err)
+	}
+	djs := out.String()
+	if !strings.Contains(djs, `"kind": "DirContext"`) || !strings.Contains(djs, `"matched": "replica"`) {
+		t.Fatalf("dir json:\n%s", djs)
+	}
+}
+
 // initFileRemote creates a non-bare git repo usable as a local file remote.
 func initFileRemote(t *testing.T, dir string) {
 	t.Helper()
