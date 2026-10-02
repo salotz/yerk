@@ -404,15 +404,14 @@ only when operator reprioritizes.
 
 ## Immediate next step
 
-**Done this chunk:** Phase 7 — ADR 018; `name-tags` path math; inline
-`workspace_style` table (`main_dir` / `replica_dir`); live list + lookup;
+**Done this chunk:** Phase 8 — `workspace ensure --tag` (XOR with names/`--all`);
+shared `--output json|yaml|table` (ADR 019); go-git stay-subprocess note (ADR 020);
 tests + docs.
 
-**Next (default on go):** **Phase 8 polish** — `workspace ensure --tag`,
-shared `--output json|yaml|table` (as scheduled).
+**Next (default on go):** **Phase 9** — sync verbs design only (`pull`/`push` ADR,
+no CLI stubs).
 
 Alternates if operator widens scope:
 
-1. Phase 9 — sync verbs design only  
-2. Held — parallel change probes (only if reprioritized)  
-3. Close-out / success criteria pass
+1. Close-out / success criteria pass  
+2. Held — parallel change probes (only if reprioritized)

@@ -19,6 +19,7 @@ Give an AI agent or tool a **single structured dump** of yerk vocabulary and
    ```sh
    yerk context
    yerk context --output json
+   yerk context --output yaml
    ```
 
 2. **Directory context** (cwd or path → project/replica + placement + short status):
@@ -34,8 +35,8 @@ Give an AI agent or tool a **single structured dump** of yerk vocabulary and
    flag, live replica names, and overall presence rollup. Change probes are
    off by default; pass `--git` if overall change is needed.
 
-3. **Stability:** JSON uses `apiVersion: yerk/v1` and kinds `ToolContext` /
-   `DirContext`. Keys are best-effort stable (ADR 017) — do not rely on casual
+3. **Stability:** JSON/YAML use `apiVersion: yerk/v1` and kinds `ToolContext` /
+   `DirContext`. Keys are best-effort stable (ADR 017/019) — do not rely on casual
    renames; breaks bump version or release notes.
 
 4. **When to use finer tools instead:**
@@ -45,7 +46,7 @@ Give an AI agent or tool a **single structured dump** of yerk vocabulary and
    | One resource by id | `yerk get <id> --output json` |
    | Path → id only | `yerk lookup <path> --output json` |
    | Full placement stack | `yerk config resolve <project-id>` |
-   | Full change table | `yerk status <project-id>` |
+   | Full change / multi-replica | `yerk status <project-id> [--output json]` |
 
 ## See also
 

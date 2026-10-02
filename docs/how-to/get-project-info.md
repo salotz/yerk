@@ -27,18 +27,21 @@ yerk replica lookup /path/under/replica
 Any subdirectory under a known workspace or replica root matches (walk-up).
 `replica lookup` errors if the path is only under the project workspace.
 
-## JSON for agents
+## Structured output for agents
 
 ```sh
 yerk get personal/yerk --output json
+yerk get personal/yerk --output yaml
 yerk lookup . --output json
 ```
 
 Documents are `ProjectInfo` or `ReplicaInfo` with `apiVersion: yerk/v1`
-(ADR 015).
+(ADR 015). `--output table` keeps the human key/value layout. Shared flag
+surface: ADR 019.
 
 ## See also
 
 - [Identifiers](../explanation/identifiers.md)
 - [Commands](../reference/commands.md)
 - [ADR 015](../../design/decisions/015-get-and-lookup.md)
+- [ADR 019](../../design/decisions/019-output-formats.md)

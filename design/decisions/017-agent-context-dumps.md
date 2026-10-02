@@ -69,7 +69,7 @@ CLI `RunE` stays thin: load → build → print.
 
 - Agents can bootstrap with one call.
 - `get` / `lookup` / `config resolve` remain the precise single-purpose tools.
-- Future: optional `--with-change` on dir context; yaml output with Phase 8.
+- Future: optional `--with-change` on dir context (change probes already via `--git`).
 
 ## Related
 

@@ -18,7 +18,7 @@ Materialize on-disk replica(s) for cataloged project(s) with `yerk materialize`
 
 1. Confirm resolve path: `yerk path <project-id> <replica>` (workspace:
    `yerk path <project-id>`)
-2. Optional: `yerk workspace ensure <project-id>` (or `--all`) for workspace dirs
+2. Optional: `yerk workspace ensure <project-id>` (or `--all` / `--tag`) for workspace dirs
 3. Materialize one project (default replica, or name it):
 
    ```sh

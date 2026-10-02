@@ -47,4 +47,6 @@ a second full flag dump.
 - [ADR 015](../../design/decisions/015-get-and-lookup.md)
 - [ADR 016](../../design/decisions/016-replica-create.md)
 - [ADR 017](../../design/decisions/017-agent-context-dumps.md)
+- [ADR 019](../../design/decisions/019-output-formats.md)
+- [ADR 020](../../design/decisions/020-git-adapter-subprocess.md)
 - [How to dump agent context](../how-to/agent-context.md)

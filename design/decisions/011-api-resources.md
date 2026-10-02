@@ -74,7 +74,7 @@ cobra `RunE` beyond flag parse, selection, and print.
 
 ### Out of scope for this ADR (follow-ons)
 
-- `--output json|yaml|table` flag surface
+- `--output json|yaml|table` flag surface — landed in [019](./019-output-formats.md)
 - Generated or hand JSON Schema / OpenAPI
 - `yerk get <resource> [name…]`
 - Non-file backends

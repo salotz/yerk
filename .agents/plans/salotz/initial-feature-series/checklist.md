@@ -75,13 +75,13 @@ Do not put operator answers here (use [decisions.md](./decisions.md)).
 - [x] Table-driven layout; tests; no host-private paths in-repo
 - [x] ADR 018
 
-## Phase 8 — Polish (interleave OK)  **← next**
+## Phase 8 — Polish (interleave OK)
 
-- [ ] `workspace ensure --tag` (XOR with names / `--all`)
-- [ ] `--output json|yaml|table` shared flag surface
-- [ ] Optional go-git ADR note (docs only)
+- [x] `workspace ensure --tag` (XOR with names / `--all`)
+- [x] `--output json|yaml|table` shared flag surface
+- [x] Optional go-git ADR note (docs only) — ADR 020
 
-## Phase 9 — Sync verbs (design only)
+## Phase 9 — Sync verbs (design only)  **← next**
 
 - [ ] Design note / ADR for `pull` / `push` (no CLI stubs)
 - [ ] Implement only in a later plan after ADR accept

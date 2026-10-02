@@ -181,7 +181,7 @@ default_replica = "main"
 
 	out.Reset()
 	if err := cli.Execute(context.Background(), streams, []string{"workspace", "ensure"}); err == nil {
-		t.Fatal("workspace ensure with no args should require --all or project names")
+		t.Fatal("workspace ensure with no args should require --all, --tag, or project names")
 	}
 
 	out.Reset()
@@ -209,6 +209,22 @@ default_replica = "main"
 	}
 	if err := cli.Execute(context.Background(), streams, []string{"workspace", "ensure", "--all", "yerk"}); err == nil {
 		t.Fatal("ensure --all with project names should error")
+	}
+	if err := cli.Execute(context.Background(), streams, []string{"workspace", "ensure", "--all", "--tag", "devel"}); err == nil {
+		t.Fatal("ensure --all with --tag should error")
+	}
+
+	// Structured status output for single project.
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"status", "yerk", "--presence-only", "--output", "json"}); err != nil {
+		t.Fatalf("status --output json: %v", err)
+	}
+	sJSON := out.String()
+	if !strings.Contains(sJSON, `"kind": "ProjectStatus"`) && !strings.Contains(sJSON, `"kind":"ProjectStatus"`) {
+		t.Fatalf("status json:\n%s", sJSON)
+	}
+	if strings.Contains(sJSON, "workspace.style=") {
+		t.Fatalf("structured status should omit human preamble\n%s", sJSON)
 	}
 }
 
@@ -1138,8 +1154,31 @@ tags = ["devel"]
 	}
 
 	out.Reset()
-	if err := cli.Execute(context.Background(), streams, []string{"get", "yerk", "--output", "yaml"}); err == nil {
+	if err := cli.Execute(context.Background(), streams, []string{"get", "yerk", "--output", "toml"}); err == nil {
 		t.Fatal("unsupported output should error")
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"get", "yerk", "--output", "yaml"}); err != nil {
+		t.Fatalf("get --output yaml: %v", err)
+	}
+	y := out.String()
+	if !strings.Contains(y, "kind: ProjectInfo") && !strings.Contains(y, "kind: ProjectInfo\n") {
+		// yaml.v3 emits "kind: ProjectInfo"
+		if !strings.Contains(y, "kind:") || !strings.Contains(y, "ProjectInfo") {
+			t.Fatalf("yaml get:\n%s", y)
+		}
+	}
+	if !strings.Contains(y, "apiVersion:") {
+		t.Fatalf("yaml missing apiVersion:\n%s", y)
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"get", "yerk", "--output", "table"}); err != nil {
+		t.Fatalf("get --output table: %v", err)
+	}
+	if !strings.Contains(out.String(), "kind:\tProjectInfo") {
+		t.Fatalf("table should keep human layout:\n%s", out.String())
 	}
 }
 
@@ -1423,3 +1462,96 @@ func initFileRemote(t *testing.T, dir string) {
 	run("add", "README")
 	run("commit", "-m", "init")
 }
+
+func TestWorkspaceEnsureTag(t *testing.T) {
+	dir := t.TempDir()
+	alphaWS := filepath.Join(dir, "devel", "alpha")
+	betaWS := filepath.Join(dir, "devel", "beta")
+	cfg := []byte(`[workspace]
+style = "workspace-dir"
+
+[[projects]]
+name = "alpha"
+domain = "personal"
+path = "` + alphaWS + `"
+
+[[projects]]
+name = "beta"
+domain = "personal"
+path = "` + betaWS + `"
+`)
+	cat := []byte(`
+tags = ["devel", "work"]
+
+[[projects]]
+name = "alpha"
+domain = "personal"
+remote = "git@example.com:a/alpha.git"
+tags = ["devel"]
+
+[[projects]]
+name = "beta"
+domain = "personal"
+remote = "git@example.com:a/beta.git"
+tags = ["work"]
+`)
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), cfg, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	setYerkHostEnv(t, dir)
+
+	var out bytes.Buffer
+	streams := cli.IO{Out: &out, Err: &out}
+
+	if err := cli.Execute(context.Background(), streams, []string{"workspace", "ensure", "--tag", "devel"}); err != nil {
+		t.Fatalf("ensure --tag: %v\n%s", err, out.String())
+	}
+	if _, err := os.Stat(alphaWS); err != nil {
+		t.Fatalf("alpha workspace missing: %v", err)
+	}
+	if _, err := os.Stat(betaWS); !os.IsNotExist(err) {
+		t.Fatalf("beta should not be ensured by --tag devel")
+	}
+	if !strings.Contains(out.String(), alphaWS) {
+		t.Fatalf("ensure --tag out:\n%s", out.String())
+	}
+
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"tag+name", []string{"workspace", "ensure", "--tag", "devel", "alpha"}, "not a combination"},
+		{"all+tag", []string{"workspace", "ensure", "--all", "--tag", "devel"}, "not a combination"},
+		{"unknown-tag", []string{"workspace", "ensure", "--tag", "nope"}, "unknown tag"},
+		{"empty-tag", []string{"workspace", "ensure", "--tag", "work"}, "no projects matched tag"},
+	}
+	// empty-tag needs a declared tag with zero members — recreate catalog
+	catEmpty := []byte(`
+tags = ["devel", "work"]
+
+[[projects]]
+name = "alpha"
+domain = "personal"
+remote = "git@example.com:a/alpha.git"
+tags = ["devel"]
+`)
+	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), catEmpty, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := cli.Execute(context.Background(), streams, tc.args)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+

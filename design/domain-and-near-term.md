@@ -56,7 +56,7 @@ It speaks PRJX vocabulary; it does not redefine the PRJX spec.
 | Add/update catalog row | register | hand-edit catalog (future `yerk register`) |
 | List / show states | status (read model) | `yerk status` multi-project overall; `status <project>` all live replicas; `status <project> <replica>` one row; `--tag`; change on by default (`--presence-only` opt-out) |
 | Path math only | resolve | `yerk path` (alias: `resolve`); bare name → workspace, +replica → checkout |
-| Create project workspace dir | materialize workspace | `yerk workspace ensure <proj>…` or `--all` (later also `--tag`) |
+| Create project workspace dir | materialize workspace | `yerk workspace ensure <proj>…` \| `--all` \| `--tag` |
 | Create replica via git | materialize replica | `yerk materialize <id> [replica]` \| `--all` \| `--tag` |
 | Session replica spin-out | create replica | `yerk replica create <id> <replica>` (`--method worktree\|clone`; ADR 016) |
 | Workspace styles | layout path math | `workspace-dir`, `project-dir`, `name-tags` (+ optional main_dir/replica_dir; ADR 018) |
@@ -83,6 +83,7 @@ Commands that act on **many** projects share one selection model (ADR 010):
 | `--tag <name>` | Projects that list declared tag `<name>` | `status --tag`; `materialize --tag` |
 | project id args | Explicit subset (ADR 012 forms) | `workspace ensure <id>…`, `materialize <id>` |
 | `--all` | Explicit full catalog (opt-in bulk mutate) | `workspace ensure --all`, `materialize --all` |
+| `--tag` | Declared catalog tag bulk mutate | `workspace ensure --tag`, `materialize --tag`, `status --tag` |
 
 Rules:
 

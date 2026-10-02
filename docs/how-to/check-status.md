@@ -60,10 +60,20 @@ presence scan.
    yerk status --presence-only
    ```
 
-6. Read **presence** vs **change** without conflating them: change is only
+6. **Structured output** (agents; ADR 019):
+
+   ```sh
+   yerk status yerk --output json
+   yerk status --tag devel --output yaml
+   ```
+
+   Single project → one `ProjectStatus` document; multi-project → a list.
+   `--output table` keeps the human table/detail layout.
+
+7. Read **presence** vs **change** without conflating them: change is only
    meaningful when presence is `present` (or overall has present replicas).
 
-7. Read change flags as a **bag**, not a single enum. Common patterns:
+8. Read change flags as a **bag**, not a single enum. Common patterns:
 
    | CHANGE | Rough meaning |
    | --- | --- |

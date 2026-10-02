@@ -22,3 +22,5 @@ Architecture decision records for `yerk`.
 | [016](./016-replica-create.md) | Replica create (worktree \| clone method) |
 | [017](./017-agent-context-dumps.md) | Agent context dumps (`yerk context`) |
 | [018](./018-name-tags-workspace-style.md) | `name-tags` style path math + inline params |
+| [019](./019-output-formats.md) | Shared `--output json\|yaml\|table` |
+| [020](./020-git-adapter-subprocess.md) | Git adapter stays subprocess (not go-git) |

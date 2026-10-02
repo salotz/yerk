@@ -75,8 +75,8 @@ or left default.
 - **Human-friendly** default: stable key/value (or short labeled) text on
   stdout.
 - **`--output json`**: single JSON document of the info resource (indent OK).
-- Shared flag name `--output` with value `json` in this phase; `yaml` / `table`
-  may arrive with the broader output polish (Phase 8) without renaming the flag.
+- Shared flag name `--output`; values `json` | `yaml` | `table` (human default
+  when omitted). See [019](./019-output-formats.md).
 
 TTY auto-json is **not** required in this phase.
 

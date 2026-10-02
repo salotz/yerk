@@ -23,6 +23,7 @@ import (
 	"github.com/salotz/yerk/internal/version"
 	"github.com/salotz/yerk/internal/workspace"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 // IO bundles process streams so tests can capture output.
@@ -86,7 +87,7 @@ Vocabulary aligns with PRJX (project, replica, workspace).
 Project identity (ADR 012): bare domain/name[/replica] or yerk://… URI.
 Short unique names expand; ambiguous short names error.
 
-Read one resource: yerk get <id>, yerk lookup <path> (--output json).
+Read one resource: yerk get <id>, yerk lookup <path> (--output json|yaml).
 Agent dumps: yerk context; yerk context dir [path].
 
 Default files:
@@ -141,6 +142,7 @@ func newStatusCmd(streams IO) *cobra.Command {
 		presenceOnly bool
 		network      bool
 		gitCompat    bool // deprecated alias; ignored when presence-only is set
+		output       string
 	)
 	cmd := &cobra.Command{
 		Use:   "status [project [replica]]",
@@ -165,9 +167,15 @@ fallback "main"). With --presence-only and no --network, default branch is
 catalog override or "main" only (no ls-remote).
 
 --tag must appear in the catalog's top-level tags list. Same selection model
-will apply to other bulk ops (workspace ensure, materialize, …).`, "status"),
+as workspace ensure and materialize (names | --all | --tag).
+
+Default output is a human table (or single-project detail). Pass --output
+json|yaml for api resources; --output table forces the human table layout.`, "status"),
 		Args: cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateOutputFlag(output); err != nil {
+				return err
+			}
 			if tagFilter != "" && len(args) > 0 {
 				return errors.New("status: pass --tag or project args, not both")
 			}
@@ -201,7 +209,10 @@ will apply to other bulk ops (workspace ensure, materialize, …).`, "status"),
 			useNet := network || withGit
 			opts := project.StatusOptions{Git: withGit, Network: useNet}
 
-			fmt.Fprintf(streams.Out, "workspace.style=%s\n", res.Layout.Style)
+			structured := isStructuredOutput(output)
+			if !structured {
+				fmt.Fprintf(streams.Out, "workspace.style=%s\n", res.Layout.Style)
+			}
 
 			if len(args) >= 1 {
 				p, ref, err := resolveProjectArgs(cat, args)
@@ -213,7 +224,7 @@ will apply to other bulk ops (workspace ensure, materialize, …).`, "status"),
 					if err != nil {
 						return err
 					}
-					return printReplicaStatusTable(streams.Out, []api.ReplicaStatus{row}, withGit)
+					return printReplicaStatusOutput(streams.Out, []api.ReplicaStatus{row}, withGit, output)
 				}
 				rows, err := res.ProjectStatuses(cmd.Context(), []config.Project{p}, opts)
 				if err != nil {
@@ -222,8 +233,8 @@ will apply to other bulk ops (workspace ensure, materialize, …).`, "status"),
 				if len(rows) == 0 {
 					return fmt.Errorf("status: no project status rows")
 				}
-				// Single-project: summary + per-replica table.
-				return printProjectStatusDetail(streams.Out, rows[0], withGit)
+				// Single-project: summary + per-replica table (or structured resource).
+				return printProjectStatusDetailOutput(streams.Out, rows[0], withGit, output)
 			}
 
 			// Project list (all or --tag)
@@ -234,7 +245,9 @@ will apply to other bulk ops (workspace ensure, materialize, …).`, "status"),
 				if err != nil {
 					return err
 				}
-				fmt.Fprintf(streams.Out, "filter.tag=%s\n", tagFilter)
+				if !structured {
+					fmt.Fprintf(streams.Out, "filter.tag=%s\n", tagFilter)
+				}
 			default:
 				projects = append([]config.Project(nil), cat.Projects...)
 			}
@@ -251,12 +264,13 @@ will apply to other bulk ops (workspace ensure, materialize, …).`, "status"),
 			if err != nil {
 				return err
 			}
-			return printProjectStatusTable(streams.Out, rows, withGit)
+			return printProjectStatusListOutput(streams.Out, rows, withGit, output)
 		},
 	}
 	cmd.Flags().StringVar(&tagFilter, "tag", "", "Only projects with this declared catalog tag")
 	cmd.Flags().BoolVar(&presenceOnly, "presence-only", false, "Skip git change probes (presence only)")
 	cmd.Flags().BoolVar(&network, "network", false, "Resolve default branch via git ls-remote")
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json|yaml|table (default: human table/detail)")
 	// Deprecated: change is on by default; kept so old invocations do not error.
 	cmd.Flags().BoolVar(&gitCompat, "git", false, "Deprecated: change probes are on by default (no-op)")
 	_ = cmd.Flags().MarkHidden("git")
@@ -330,8 +344,8 @@ func newGetCmd(streams IO) *cobra.Command {
 Id forms: short unique name, domain/name, or yerk://… (ADR 012). A project id
 never auto-expands to the main replica.
 
-Default output is human key/value text. Pass --output json for a single JSON
-document (apiVersion yerk/v1).
+Default output is human key/value text. Pass --output json|yaml for a single
+api resource (apiVersion yerk/v1); --output table keeps human layout.
 
 See also: yerk project get, yerk replica get, yerk lookup.`, "get"),
 		Args: cobra.ExactArgs(1),
@@ -362,7 +376,7 @@ See also: yerk project get, yerk replica get, yerk lookup.`, "get"),
 			return printProjectInfo(streams.Out, info, output)
 		},
 	}
-	cmd.Flags().StringVar(&output, "output", "", "Output format: json (default: human text)")
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json|yaml|table (default: human text)")
 	return cmd
 }
 
@@ -379,7 +393,8 @@ func newLookupCmd(streams IO) *cobra.Command {
 Walk-up: any subdirectory under a known workspace or replica root matches.
 Longest matching root wins when multiple projects could apply.
 
-Default output is human key/value text. Pass --output json for JSON.
+Default output is human key/value text. Pass --output json|yaml for structured
+api resources; --output table keeps human layout.
 
 See also: yerk project lookup, yerk replica lookup, yerk get.`, "lookup"),
 		Args: cobra.ExactArgs(1),
@@ -398,7 +413,7 @@ See also: yerk project lookup, yerk replica lookup, yerk get.`, "lookup"),
 			return printLookupResult(streams.Out, result, output)
 		},
 	}
-	cmd.Flags().StringVar(&output, "output", "", "Output format: json (default: human text)")
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json|yaml|table (default: human text)")
 	return cmd
 }
 
@@ -453,7 +468,7 @@ Rejects replica ids; use yerk replica get or yerk get <id>/<replica>.`, "project
 			return printProjectInfo(streams.Out, info, output)
 		},
 	}
-	cmd.Flags().StringVar(&output, "output", "", "Output format: json (default: human text)")
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json|yaml|table (default: human text)")
 	return cmd
 }
 
@@ -481,7 +496,7 @@ Paths under a replica still resolve to the owning project.`, "project lookup"),
 			return printLookupResult(streams.Out, result, output)
 		},
 	}
-	cmd.Flags().StringVar(&output, "output", "", "Output format: json (default: human text)")
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json|yaml|table (default: human text)")
 	return cmd
 }
 
@@ -606,7 +621,7 @@ Replica distinguisher is required (no default-replica expansion).`, "replica get
 			return printReplicaInfo(streams.Out, info, output)
 		},
 	}
-	cmd.Flags().StringVar(&output, "output", "", "Output format: json (default: human text)")
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json|yaml|table (default: human text)")
 	return cmd
 }
 
@@ -634,7 +649,7 @@ Errors if the path is only under a project workspace and not under a replica roo
 			return printLookupResult(streams.Out, result, output)
 		},
 	}
-	cmd.Flags().StringVar(&output, "output", "", "Output format: json (default: human text)")
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json|yaml|table (default: human text)")
 	return cmd
 }
 
@@ -656,12 +671,53 @@ func loadResolver(streams IO) (config.Config, config.Catalog, project.Resolver, 
 	return cfg, cat, res, nil
 }
 
+// validateOutputFlag accepts the shared --output surface:
+// omit / "" / "table" → human layout; "json" | "yaml" → structured.
 func validateOutputFlag(output string) error {
 	switch strings.TrimSpace(output) {
-	case "", "json":
+	case "", "json", "yaml", "table":
 		return nil
 	default:
-		return fmt.Errorf("unsupported --output %q (want json or omit for human text)", output)
+		return fmt.Errorf("unsupported --output %q (want json, yaml, table, or omit for human default)", output)
+	}
+}
+
+func isStructuredOutput(output string) bool {
+	switch strings.TrimSpace(output) {
+	case "json", "yaml":
+		return true
+	default:
+		return false
+	}
+}
+
+// writeStructured encodes v as indented JSON or YAML per --output.
+// Call only when isStructuredOutput(output) is true.
+// YAML reuses json field names (ADR 011/019): encode via JSON map intermediate
+// so structs need only `json` tags.
+func writeStructured(w io.Writer, output string, v any) error {
+	switch strings.TrimSpace(output) {
+	case "json":
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		return enc.Encode(v)
+	case "yaml":
+		b, err := json.Marshal(v)
+		if err != nil {
+			return err
+		}
+		var raw any
+		if err := json.Unmarshal(b, &raw); err != nil {
+			return err
+		}
+		enc := yaml.NewEncoder(w)
+		enc.SetIndent(2)
+		if err := enc.Encode(raw); err != nil {
+			return err
+		}
+		return enc.Close()
+	default:
+		return fmt.Errorf("writeStructured: not a structured format %q", output)
 	}
 }
 
@@ -676,8 +732,8 @@ func printLookupResult(w io.Writer, result project.LookupResult, output string) 
 }
 
 func printProjectInfo(w io.Writer, info api.ProjectInfo, output string) error {
-	if strings.TrimSpace(output) == "json" {
-		return writeJSON(w, info)
+	if isStructuredOutput(output) {
+		return writeStructured(w, output, info)
 	}
 	fmt.Fprintf(w, "kind:\t%s\n", info.Kind)
 	fmt.Fprintf(w, "uri:\t%s\n", dash(info.URI))
@@ -702,8 +758,8 @@ func printProjectInfo(w io.Writer, info api.ProjectInfo, output string) error {
 }
 
 func printReplicaInfo(w io.Writer, info api.ReplicaInfo, output string) error {
-	if strings.TrimSpace(output) == "json" {
-		return writeJSON(w, info)
+	if isStructuredOutput(output) {
+		return writeStructured(w, output, info)
 	}
 	fmt.Fprintf(w, "kind:\t%s\n", info.Kind)
 	fmt.Fprintf(w, "uri:\t%s\n", dash(info.URI))
@@ -728,15 +784,6 @@ func printReplicaInfo(w io.Writer, info api.ReplicaInfo, output string) error {
 	return nil
 }
 
-func writeJSON(w io.Writer, v any) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(v); err != nil {
-		return err
-	}
-	return nil
-}
-
 func newWorkspaceCmd(streams IO) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "workspace",
@@ -747,7 +794,8 @@ Subcommands create or inspect layout only. They do not create replica
 checkouts — use yerk materialize for that.
 
   yerk workspace ensure <project-id>...   mkdir named project workspace dirs
-  yerk workspace ensure --all             mkdir every catalog project workspace`, "workspace"),
+  yerk workspace ensure --all             mkdir every catalog project workspace
+  yerk workspace ensure --tag <name>      mkdir workspaces for projects with tag`, "workspace"),
 		RunE: requireSubcommand,
 	}
 	root.AddCommand(newWorkspaceEnsureCmd(streams))
@@ -757,6 +805,7 @@ checkouts — use yerk materialize for that.
 func newWorkspaceEnsureCmd(streams IO) *cobra.Command {
 	var (
 		all       bool
+		tagFilter string
 		styleFlag string
 	)
 	cmd := &cobra.Command{
@@ -772,8 +821,13 @@ On first successful ensure for a project, writes host project state (bound
 workspace style) under $XDG_STATE_HOME/yerk (or YERK__STATE_DIR). Already
 initialized projects are a state no-op.
 
-With --all, ensure every project in the catalog. Bare ensure with no names
-and no --all is an error (bulk mkdir is opt-in).
+Bulk (opt-in; mutually exclusive selectors):
+  yerk workspace ensure --all
+  yerk workspace ensure --tag <name>
+
+Bare ensure with no names and no --all/--tag is an error (bulk mkdir is opt-in).
+--tag must be a declared catalog tag. Unknown tags error. A declared tag with
+zero matching projects is an error for ensure (empty mutate selection).
 
 --workspace-style sets an explicit style for this invocation; if it contradicts
 bound state, ensure errors (no silent rebind).
@@ -783,12 +837,6 @@ Does not need git or --network.
 
 See also: yerk path <project>, yerk materialize <project>.`, "workspace ensure"),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if all && len(args) > 0 {
-				return errors.New("workspace ensure: pass project names or --all, not both")
-			}
-			if !all && len(args) == 0 {
-				return errors.New("workspace ensure: name one or more projects, or pass --all")
-			}
 			cfg, err := config.Load()
 			if err != nil {
 				return err
@@ -797,7 +845,7 @@ See also: yerk path <project>, yerk materialize <project>.`, "workspace ensure")
 			if err != nil {
 				return err
 			}
-			projects, err := selectProjects(cat, args, all)
+			projects, err := resolveBulkProjectSelection(cat, args, all, tagFilter, "workspace ensure")
 			if err != nil {
 				return err
 			}
@@ -824,6 +872,7 @@ See also: yerk path <project>, yerk materialize <project>.`, "workspace ensure")
 		},
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "Ensure every project workspace in the catalog")
+	cmd.Flags().StringVar(&tagFilter, "tag", "", "Ensure every project with this declared catalog tag")
 	cmd.Flags().StringVar(&styleFlag, "workspace-style", "", "Explicit workspace style (errors if contradicts bound state)")
 	return cmd
 }
@@ -969,65 +1018,40 @@ func materializeOne(ctx context.Context, streams IO, res project.Resolver, git g
 	return nil
 }
 
-// resolveCloneSelection picks projects and an optional shared replica name.
-// Modes (XOR): single/multi handled as single project+optional replica args,
-// --all, or --tag. Mutate empty selection is an error.
+// resolveMaterializeSelection picks projects and an optional shared replica name.
+// Modes (XOR): single project + optional replica args, --all, or --tag.
+// Mutate empty selection is an error.
 func resolveMaterializeSelection(cat config.Catalog, args []string, all bool, tag, replicaFlag string) ([]config.Project, string, error) {
 	replicaFlag = strings.TrimSpace(replicaFlag)
 	tag = strings.TrimSpace(tag)
-	nSel := 0
-	if all {
-		nSel++
-	}
-	if tag != "" {
-		nSel++
-	}
-	if len(args) > 0 {
-		nSel++
-	}
-	if nSel > 1 {
-		return nil, "", errors.New("materialize: pass project args, --all, or --tag, not a combination")
-	}
-	if nSel == 0 {
-		return nil, "", errors.New("materialize: name a project, or pass --all or --tag")
-	}
 
-	if all {
-		projects, err := selectProjects(cat, nil, true)
+	// Named args may include an optional replica distinguisher (max 2).
+	if !all && tag == "" {
+		if len(args) == 0 {
+			return nil, "", errors.New("materialize: name a project, or pass --all or --tag")
+		}
+		if len(args) > 2 {
+			return nil, "", errors.New("materialize: too many arguments (use --all or --tag for bulk)")
+		}
+		p, ref, err := resolveProjectArgs(cat, args)
 		if err != nil {
 			return nil, "", err
 		}
-		return projects, replicaFlag, nil
-	}
-	if tag != "" {
-		projects, err := cat.SelectByTag(tag)
-		if err != nil {
-			return nil, "", err
+		replica := replicaFlag
+		if ref.IsReplica() {
+			if replicaFlag != "" && replicaFlag != ref.Replica {
+				return nil, "", errors.New("materialize: pass replica as argument or --replica, not both with different values")
+			}
+			replica = ref.Replica
 		}
-		if len(projects) == 0 {
-			return nil, "", fmt.Errorf("materialize: no projects matched tag %q", tag)
-		}
-		return projects, replicaFlag, nil
+		return []config.Project{p}, replica, nil
 	}
 
-	if len(args) == 0 {
-		return nil, "", errors.New("materialize: name a project, or pass --all or --tag")
-	}
-	if len(args) > 2 {
-		return nil, "", errors.New("materialize: too many arguments (use --all or --tag for bulk)")
-	}
-	p, ref, err := resolveProjectArgs(cat, args)
+	projects, err := resolveBulkProjectSelection(cat, args, all, tag, "materialize")
 	if err != nil {
 		return nil, "", err
 	}
-	replica := replicaFlag
-	if ref.IsReplica() {
-		if replicaFlag != "" && replicaFlag != ref.Replica {
-			return nil, "", errors.New("materialize: pass replica as argument or --replica, not both with different values")
-		}
-		replica = ref.Replica
-	}
-	return []config.Project{p}, replica, nil
+	return projects, replicaFlag, nil
 }
 
 // resolveProjectArgs expands CLI project args into a catalog row + id.Ref.
@@ -1283,8 +1307,8 @@ func newContextCmd(streams IO) *cobra.Command {
   yerk context                 → tool vocabulary, commands, XDG paths
   yerk context dir [path]      → where is this path? (cwd default)
 
-Human text by default; --output json for a single api resource
-(ToolContext or DirContext, apiVersion yerk/v1).
+Human text by default; --output json|yaml for a single api resource
+(ToolContext or DirContext, apiVersion yerk/v1); --output table keeps human text.
 
 Composes get/lookup + config resolve + short status — does not scrape markdown.
 JSON keys are best-effort stable under yerk/v1 (avoid casual renames).
@@ -1303,7 +1327,7 @@ See docs/how-to/agent-context.md.`, "context"),
 			return printToolContext(streams.Out, tc, output)
 		},
 	}
-	root.Flags().String("output", "", "Output format: json (default: human text)")
+	root.Flags().String("output", "", "Output format: json|yaml|table (default: human text)")
 	root.AddCommand(newContextDirCmd(streams))
 	return root
 }
@@ -1351,14 +1375,14 @@ Unknown path (not under any catalog workspace) → error.`, "context dir"),
 			return printDirContext(streams.Out, dc, output)
 		},
 	}
-	cmd.Flags().StringVar(&output, "output", "", "Output format: json (default: human text)")
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json|yaml|table (default: human text)")
 	cmd.Flags().BoolVar(&withGit, "git", false, "Include git change probes in status overall")
 	return cmd
 }
 
 func printToolContext(w io.Writer, tc api.ToolContext, output string) error {
-	if strings.TrimSpace(output) == "json" {
-		return writeJSON(w, tc)
+	if isStructuredOutput(output) {
+		return writeStructured(w, output, tc)
 	}
 	fmt.Fprintf(w, "kind:\t%s\n", tc.Kind)
 	fmt.Fprintf(w, "apiVersion:\t%s\n", tc.APIVersion)
@@ -1395,8 +1419,8 @@ func printToolContext(w io.Writer, tc api.ToolContext, output string) error {
 }
 
 func printDirContext(w io.Writer, dc api.DirContext, output string) error {
-	if strings.TrimSpace(output) == "json" {
-		return writeJSON(w, dc)
+	if isStructuredOutput(output) {
+		return writeStructured(w, output, dc)
 	}
 	fmt.Fprintf(w, "kind:\t%s\n", dc.Kind)
 	fmt.Fprintf(w, "apiVersion:\t%s\n", dc.APIVersion)
@@ -1479,13 +1503,13 @@ See ADR 013 (layers) and docs/how-to/explain-placement.md.`, "config resolve"),
 			return printConfigResolve(streams.Out, report, output)
 		},
 	}
-	cmd.Flags().StringVar(&output, "output", "", "Output format: json (default: human text)")
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json|yaml|table (default: human text)")
 	return cmd
 }
 
 func printConfigResolve(w io.Writer, rep api.ConfigResolve, output string) error {
-	if strings.TrimSpace(output) == "json" {
-		return writeJSON(w, rep)
+	if isStructuredOutput(output) {
+		return writeStructured(w, output, rep)
 	}
 	fmt.Fprintf(w, "kind:\t%s\n", rep.Kind)
 	fmt.Fprintf(w, "uri:\t%s\n", dash(rep.URI))
@@ -1607,6 +1631,43 @@ func requireSubcommand(cmd *cobra.Command, args []string) error {
 	return cmd.Help()
 }
 
+// resolveBulkProjectSelection picks projects for mutate bulk ops.
+// Modes (XOR): project name args, --all, or --tag. Empty selection is an error.
+// verb is used in error messages (e.g. "workspace ensure", "materialize").
+func resolveBulkProjectSelection(cat config.Catalog, args []string, all bool, tag, verb string) ([]config.Project, error) {
+	tag = strings.TrimSpace(tag)
+	nSel := 0
+	if all {
+		nSel++
+	}
+	if tag != "" {
+		nSel++
+	}
+	if len(args) > 0 {
+		nSel++
+	}
+	if nSel > 1 {
+		return nil, fmt.Errorf("%s: pass project args, --all, or --tag, not a combination", verb)
+	}
+	if nSel == 0 {
+		return nil, fmt.Errorf("%s: name one or more projects, or pass --all or --tag", verb)
+	}
+	if all {
+		return selectProjects(cat, nil, true)
+	}
+	if tag != "" {
+		projects, err := cat.SelectByTag(tag)
+		if err != nil {
+			return nil, err
+		}
+		if len(projects) == 0 {
+			return nil, fmt.Errorf("%s: no projects matched tag %q", verb, tag)
+		}
+		return projects, nil
+	}
+	return selectProjects(cat, args, false)
+}
+
 // selectProjects returns catalog rows for the given identifiers, or the full
 // catalog when all is true. Caller must already enforce names XOR all.
 // Each name is expanded via Catalog.Resolve (short / bare / URI).
@@ -1640,6 +1701,33 @@ func selectProjects(cat config.Catalog, names []string, all bool) ([]config.Proj
 		out = append(out, p)
 	}
 	return out, nil
+}
+
+// printProjectStatusListOutput prints multi-project status (table or structured list).
+func printProjectStatusListOutput(w io.Writer, rows []api.ProjectStatus, withGit bool, output string) error {
+	if isStructuredOutput(output) {
+		return writeStructured(w, output, rows)
+	}
+	return printProjectStatusTable(w, rows, withGit)
+}
+
+// printProjectStatusDetailOutput prints one project detail or structured ProjectStatus.
+func printProjectStatusDetailOutput(w io.Writer, row api.ProjectStatus, withGit bool, output string) error {
+	if isStructuredOutput(output) {
+		return writeStructured(w, output, row)
+	}
+	return printProjectStatusDetail(w, row, withGit)
+}
+
+// printReplicaStatusOutput prints replica status rows (table or structured).
+func printReplicaStatusOutput(w io.Writer, rows []api.ReplicaStatus, withGit bool, output string) error {
+	if isStructuredOutput(output) {
+		if len(rows) == 1 {
+			return writeStructured(w, output, rows[0])
+		}
+		return writeStructured(w, output, rows)
+	}
+	return printReplicaStatusTable(w, rows, withGit)
 }
 
 // printProjectStatusTable writes the multi-project status table.

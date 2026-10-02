@@ -59,8 +59,8 @@ Replica checkout paths are created by `yerk materialize` (parents via
 ## Consequences
 
 - Docs, domain language, envvars command paths, and agent surface lists use
-  `yerk workspace ensure` / `--all`.
-- Status / clone still target default or named **replicas**; ensure is
+  `yerk workspace ensure` / `--all` / `--tag`.
+- Status / materialize still target default or named **replicas**; ensure is
   orthogonal and does not imply a replica distinguisher.
 - Empty catalog with `--all` is an error; bare ensure without selection is
   always an error.
