@@ -14,14 +14,13 @@ func TestProjectFromConfig(t *testing.T) {
 		Name:           "yerk",
 		Domain:         "personal",
 		Remote:         "git@example.com:salotz/yerk.git",
-		Path:           "devel/yerk",
 		DefaultReplica: "main",
 		Tags:           []string{"devel"},
 	})
 	if p.APIVersion != api.APIVersion || p.Kind != api.KindProject {
 		t.Fatalf("type meta: %+v", p)
 	}
-	if p.Name != "yerk" || p.Domain != "personal" || p.Path != "devel/yerk" {
+	if p.Name != "yerk" || p.Domain != "personal" {
 		t.Fatalf("identity: %+v", p)
 	}
 	if p.URI != "yerk://personal/yerk" {

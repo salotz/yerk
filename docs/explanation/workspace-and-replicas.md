@@ -4,27 +4,25 @@ Status: **stub**
 
 ## Intent
 
-Clarify **domain root**, **project workspace**, and **replica**, and why
-materializing layout vs git are separate steps
-(`workspace ensure` vs `materialize`).
+Clarify **project workspace** and **replica**, and why materializing layout vs
+git are separate steps (`workspace ensure` vs `materialize`).
 
 ## Points (to expand)
 
-- Domain root (`[domains.personal]`) is host-absolute; catalog-relative paths join it
+- Domain is an **id namespace** only (`personal/yerk`, `yerk://…`) — ADR 012 / 014
+- **Catalog** = what projects exist (portable); **config** = how they sit on this host
+- Project workspace: optional `[domains]` → `<root>/<name>`; optional host `[[projects]]` path override (absolute/`~/` or relative under root)
+- Catalog must not carry host `path` (load error if present)
 - Project workspace owns replicas; not a git checkout
-- Style places the replica under the workspace (`workspace-dir` / `project-dir`)
-- Replica distinguisher (often default branch short name)
-- Absolute catalog `path` is a host escape hatch
-- `yerk workspace ensure <project-id>…` / `--all` creates workspace dirs only (not `…/main`)
-- `yerk materialize` creates the git checkout under that layout (product name; git still clones)
-- Multi-replica / worktree-oriented styles (future detail)
+- **Effective style** merges layers (built-in → host → dir-local → catalog → **host state** → env → CLI) — ADR 013
+- Host state: `$XDG_STATE_HOME/yerk/projects/<domain>/<project>/state.json`
+- First successful `workspace ensure` or `materialize` binds style
+- Style places the replica (`workspace-dir` / `project-dir`; `name-tags` later)
+- `yerk workspace ensure` creates workspace dirs only; `yerk materialize` clones replicas
 
 ## See also
 
-- [Concepts](./concepts.md)
-- [Identifiers](./identifiers.md)
-- [How to materialize a replica](../how-to/materialize-a-replica.md)
-- [Configuration reference](../reference/configuration.md)
-- [ADR 008](../../design/decisions/008-domain-roots-and-relative-catalog-paths.md)
-- [ADR 009](../../design/decisions/009-workspace-subcommand-and-ensure-scope.md)
-- [ADR 012](../../design/decisions/012-identifiers-and-yerk-uri.md)
+- [Configuration](../reference/configuration.md)
+- [Catalog](../reference/catalog.md)
+- [ADR 013](../../design/decisions/013-placement-policy-and-host-state.md)
+- [ADR 014](../../design/decisions/014-host-local-path-model.md)

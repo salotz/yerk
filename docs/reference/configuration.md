@@ -7,39 +7,69 @@ Status: **stub**
 | Item | Default / notes |
 | --- | --- |
 | Config dir | `$XDG_CONFIG_HOME/yerk` (usually `~/.config/yerk`) |
-| Tool config | `config.toml` — workspace style, domain roots, future tool knobs |
-| Catalog | `catalog.toml` — project registry (see [catalog](./catalog.md)) |
-| Application info | [`.appinfo/meta.toml`](../../.appinfo/meta.toml) — products + env registry (RFC 030/031); not runtime config |
+| Tool config | `config.toml` — ambient style, optional **`[domains]`**, optional **`[[projects]]`** |
+| Catalog | `catalog.toml` — portable project registry (see [catalog](./catalog.md)) |
+| State dir | `$XDG_STATE_HOME/yerk` — project bindings |
+| Application info | [`.appinfo/meta.toml`](../../.appinfo/meta.toml) |
 
 ## Overrides
 
 | Variable | Effect |
 | --- | --- |
-| `YERK__CONFIG_DIR` | Directory containing both default files |
+| `YERK__CONFIG_DIR` | Directory containing both default config files |
 | `YERK__CONFIG` | Explicit tool config file path |
 | `YERK__CATALOG` | Explicit catalog file path |
-| `YERK__WORKSPACE_STYLE` | Workspace style override (`workspace-dir` \| `project-dir`) |
-
-Full env documentation: `yerk help envvars`. Live values: `yerk envvars`.
+| `YERK__STATE_DIR` | Explicit state root |
+| `YERK__WORKSPACE_STYLE` | Ambient workspace style overlay |
 
 ## `config.toml`
 
-- `[workspace].style` — how replicas sit under each resolved project workspace:
-  - `workspace-dir`: `<workspace>/<replica>`
-  - `project-dir`: `<dir(workspace)>/<name>__<replica>`
-- `[domains]` — map domain name → host-absolute root (leading `~/` ok).
-  Relative catalog paths join `<domains[domain]>/<path>` ([ADR 008](../../design/decisions/008-domain-roots-and-relative-catalog-paths.md)).
-- Defaults when the file is missing (`style = workspace-dir`, no domains)
+- `[workspace].style` — ambient host default (`workspace-dir` \| `project-dir`)
+- Effective style is **merged** (ADR 013)
+- **`[domains]`** — optional map domain name → host-absolute root (`~/…` ok)
+- **`[[projects]]`** — optional host rows matched by `name` + `domain`
 
-## Examples
+```toml
+[workspace]
+style = "workspace-dir"
 
-Portable starters: [`examples/config.toml`](../../examples/config.toml),
-[`examples/catalog.toml`](../../examples/catalog.toml). See [ADR 007](../../design/decisions/007-examples-and-host-local-data.md).
-Edit domain roots for **your** host; keep catalog paths relative when possible.
+[domains]
+personal = "~/tree/personal/devel"
+
+# Only exceptions need rows:
+[[projects]]
+name = "bimker"
+domain = "personal"
+path = "~/.bimker"
+# workspace_style = "project-dir"
+```
+
+### Workspace path resolution (ADR 014)
+
+| Condition | Workspace |
+| --- | --- |
+| Host row `path` absolute or `~/…` | that path |
+| Host row `path` relative | `<domains[domain]>/<path>` |
+| No path (no row or empty) | `<domains[domain]>/<name>` |
+| Otherwise | error — set domain root or full path |
+
+Most catalog projects need **no** host row when a domain root is set.
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `[domains].*` | no | Default base for projects in that domain |
+| `[[projects]].name` | yes (if row present) | Short name (with domain → bare id) |
+| `[[projects]].domain` | yes (if row present) | Id namespace |
+| `[[projects]].path` | no | Override or relative under domain root |
+| `[[projects]].workspace_style` | no | Host-row ambient style override |
+
+## Host project state
+
+```text
+$XDG_STATE_HOME/yerk/projects/<domain>/<project>/state.json
+```
 
 ## See also
 
 - [Catalog reference](./catalog.md)
-- [Environment variables](./envvars.md)
-- [How to use example config files](../how-to/use-example-config.md)
-- [ADR 003](../../design/decisions/003-config-xdg-and-env.md), [ADR 004](../../design/decisions/004-config-and-catalog-split.md), [ADR 007](../../design/decisions/007-examples-and-host-local-data.md), [ADR 008](../../design/decisions/008-domain-roots-and-relative-catalog-paths.md)
+- [ADR 013](../../design/decisions/013-placement-policy-and-host-state.md), [ADR 014](../../design/decisions/014-host-local-path-model.md)

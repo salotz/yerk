@@ -1,15 +1,27 @@
 # Example yerk tool / host configuration.
 # Copy to ~/.config/yerk/config.toml (or set YERK__CONFIG / YERK__CONFIG_DIR).
-# This file is host-specific: domain roots differ per machine (ADR 008).
+# Host-specific: domain roots, ambient style, and optional project overrides (ADR 014).
 
 [workspace]
-# How replicas sit under each project's resolved workspace path:
+# Ambient default style (ADR 013). Effective style may also come from
+# dir-local .local/yerk/config.toml, catalog workspace_style, host [[projects]]
+# workspace_style, host state, YERK__WORKSPACE_STYLE, or --workspace-style.
 #   workspace-dir → <workspace>/<replica>              e.g. …/example/main
 #   project-dir   → <dir(workspace)>/<name>__<replica> e.g. …/example__main
 style = "workspace-dir"
 
-# Absolute roots per domain (catalog-relative paths join these).
-# Leading ~/ expands to the user home.
+# Optional domain roots (ADR 014). Catalog projects default to <root>/<name>
+# with no per-project path row. Point the root at the common parent of
+# workspaces (often a host "devel" tree), not necessarily the domain home.
 [domains]
-personal = "~/tree/personal"
-# work = "/absolute/path/to/work-domain"
+personal = "~/tree/personal/devel"
+# examol = "~/tree/examol/devel"
+
+# Optional host rows: only when placement differs from <domain-root>/<name>,
+# or for host-only knobs (workspace_style, …). Absolute/~/ path overrides;
+# relative path joins the domain root.
+# [[projects]]
+# name = "bimker"
+# domain = "personal"
+# path = "~/.bimker"
+# # workspace_style = "project-dir"

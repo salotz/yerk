@@ -18,6 +18,7 @@ import (
 	"github.com/salotz/yerk/internal/id"
 	"github.com/salotz/yerk/internal/presence"
 	"github.com/salotz/yerk/internal/project"
+	"github.com/salotz/yerk/internal/state"
 	"github.com/salotz/yerk/internal/version"
 	"github.com/salotz/yerk/internal/workspace"
 	"github.com/spf13/cobra"
@@ -125,10 +126,10 @@ func newVersionCmd(streams IO) *cobra.Command {
 
 func newStatusCmd(streams IO) *cobra.Command {
 	var (
-		tagFilter     string
-		presenceOnly  bool
-		network       bool
-		gitCompat     bool // deprecated alias; ignored when presence-only is set
+		tagFilter    string
+		presenceOnly bool
+		network      bool
+		gitCompat    bool // deprecated alias; ignored when presence-only is set
 	)
 	cmd := &cobra.Command{
 		Use:   "status [project [replica]]",
@@ -260,8 +261,10 @@ func newPathCmd(streams IO) *cobra.Command {
   yerk path yerk://domain/name[/replica]  → same via canonical URI
 
 Project id: short unique name, domain/name, or yerk://… (ADR 012).
-Workspace is catalog path relative to [domains.<domain>] (or absolute).
-Style places the replica under the workspace (workspace-dir: <workspace>/<replica>).
+Workspace comes from host config (ADR 014): optional [domains] root + name,
+or a config [[projects]] path (absolute/~/ override or relative under the root).
+Effective workspace style (host / dir-local / catalog / state / env) places the
+replica (workspace-dir: <workspace>/<replica>).
 
 Default replica is not implied for identity: pass the distinguisher explicitly.`, "path"),
 		Args: cobra.RangeArgs(1, 2),
@@ -316,7 +319,10 @@ checkouts — use yerk materialize for that.
 }
 
 func newWorkspaceEnsureCmd(streams IO) *cobra.Command {
-	var all bool
+	var (
+		all       bool
+		styleFlag string
+	)
 	cmd := &cobra.Command{
 		Use:   "ensure [project...]",
 		Short: "Create project workspace directories (mkdir; no replica checkout)",
@@ -326,8 +332,15 @@ Creates the catalog project workspace path for each named project.
 That is the directory that owns replicas (e.g. …/devel/yerk), not a replica
 leaf (…/yerk/main).
 
+On first successful ensure for a project, writes host project state (bound
+workspace style) under $XDG_STATE_HOME/yerk (or YERK__STATE_DIR). Already
+initialized projects are a state no-op.
+
 With --all, ensure every project in the catalog. Bare ensure with no names
 and no --all is an error (bulk mkdir is opt-in).
+
+--workspace-style sets an explicit style for this invocation; if it contradicts
+bound state, ensure errors (no silent rebind).
 
 Never deletes. Does not create replica directories and does not run git.
 Does not need git or --network.
@@ -356,6 +369,8 @@ See also: yerk path <project>, yerk materialize <project>.`, "workspace ensure")
 			if err != nil {
 				return err
 			}
+			res.CLIStyle = styleFlag
+			res.Warn = streams.Err
 			for _, p := range projects {
 				path, err := res.WorkspacePath(p)
 				if err != nil {
@@ -364,12 +379,16 @@ See also: yerk path <project>, yerk materialize <project>.`, "workspace ensure")
 				if err := workspace.EnsureDir(path); err != nil {
 					return err
 				}
+				if err := res.BindOnInit(p); err != nil {
+					return fmt.Errorf("%s: bind state: %w", p.ID(), err)
+				}
 				fmt.Fprintf(streams.Out, "ensured %s -> %s\n", p.ID(), path)
 			}
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "Ensure every project workspace in the catalog")
+	cmd.Flags().StringVar(&styleFlag, "workspace-style", "", "Explicit workspace style (errors if contradicts bound state)")
 	return cmd
 }
 
@@ -379,6 +398,7 @@ func newMaterializeCmd(streams IO) *cobra.Command {
 		tagFilter   string
 		all         bool
 		network     bool
+		styleFlag   string
 	)
 	cmd := &cobra.Command{
 		Use:   "materialize [project [replica]]",
@@ -435,6 +455,8 @@ Requires git on PATH.`, "materialize"),
 			if err != nil {
 				return err
 			}
+			res.CLIStyle = styleFlag
+			res.Warn = streams.Err
 			ctx := cmd.Context()
 			var firstErr error
 			okCount := 0
@@ -461,6 +483,7 @@ Requires git on PATH.`, "materialize"),
 	cmd.Flags().StringVar(&tagFilter, "tag", "", "Materialize every project with this declared catalog tag")
 	cmd.Flags().BoolVar(&all, "all", false, "Materialize every project in the catalog")
 	cmd.Flags().BoolVar(&network, "network", true, "Resolve default branch via git ls-remote when replica omitted")
+	cmd.Flags().StringVar(&styleFlag, "workspace-style", "", "Explicit workspace style (errors if contradicts bound state)")
 	return cmd
 }
 
@@ -486,6 +509,9 @@ func materializeOne(ctx context.Context, streams IO, res project.Resolver, git g
 
 	switch presence.Classify(path) {
 	case presence.Present:
+		if err := res.BindOnInit(p); err != nil {
+			return fmt.Errorf("%s: bind state: %w", label, err)
+		}
 		fmt.Fprintf(streams.Err, "already present %s replica %s -> %s\n", label, replica, path)
 		fmt.Fprintln(streams.Out, path)
 		return nil
@@ -499,6 +525,9 @@ func materializeOne(ctx context.Context, streams IO, res project.Resolver, git g
 	fmt.Fprintf(streams.Err, "materializing %s branch %s from %s -> %s\n", label, replica, p.Remote, path)
 	if err := git.Clone(ctx, p.Remote, path, replica); err != nil {
 		return fmt.Errorf("%s: %w", label, err)
+	}
+	if err := res.BindOnInit(p); err != nil {
+		return fmt.Errorf("%s: bind state: %w", label, err)
 	}
 	fmt.Fprintln(streams.Out, path)
 	return nil
@@ -564,7 +593,6 @@ func resolveMaterializeSelection(cat config.Catalog, args []string, all bool, ta
 	}
 	return []config.Project{p}, replica, nil
 }
-
 
 // resolveProjectArgs expands CLI project args into a catalog row + id.Ref.
 // Accepts one arg (id may include replica) or two args (project id + replica).
@@ -647,25 +675,64 @@ subcommand).`, "config"),
 			} else {
 				fmt.Fprintln(streams.Out, "domains:")
 				names := make([]string, 0, len(cfg.Domains))
-				for name := range cfg.Domains {
-					names = append(names, name)
+				for d := range cfg.Domains {
+					names = append(names, d)
 				}
 				sort.Strings(names)
-				for _, name := range names {
-					raw := cfg.Domains[name]
+				for _, d := range names {
+					raw := cfg.Domains[d]
 					abs, err := config.ExpandUser(strings.TrimSpace(raw))
 					if err != nil {
-						fmt.Fprintf(streams.Out, "  %s: %s (expand error: %v)\n", name, raw, err)
+						fmt.Fprintf(streams.Out, "  %s: %s (expand error: %v)\n", d, raw, err)
 						continue
 					}
 					if abs != raw {
-						fmt.Fprintf(streams.Out, "  %s: %s → %s\n", name, raw, abs)
+						fmt.Fprintf(streams.Out, "  %s: %s → %s\n", d, raw, abs)
 					} else {
-						fmt.Fprintf(streams.Out, "  %s: %s\n", name, raw)
+						fmt.Fprintf(streams.Out, "  %s: %s\n", d, raw)
 					}
 				}
 			}
-			fmt.Fprintln(streams.Out, "placement: relative catalog path → <domain-root>/<path>; style places <workspace>/<replica> (or project-dir)")
+			if len(cfg.Projects) == 0 {
+				fmt.Fprintln(streams.Out, "projects: (none)")
+			} else {
+				fmt.Fprintln(streams.Out, "projects:")
+				// stable order by bare id
+				type row struct{ id, path, style string }
+				rows := make([]row, 0, len(cfg.Projects))
+				for _, hp := range cfg.Projects {
+					rows = append(rows, row{id: hp.ID(), path: hp.Path, style: hp.WorkspaceStyle})
+				}
+				sort.Slice(rows, func(i, j int) bool { return rows[i].id < rows[j].id })
+				for _, r := range rows {
+					extra := ""
+					if s := strings.TrimSpace(r.style); s != "" {
+						extra = " style=" + s
+					}
+					raw := strings.TrimSpace(r.path)
+					if raw == "" {
+						fmt.Fprintf(streams.Out, "  %s: (default <domain-root>/<name>)%s\n", r.id, extra)
+						continue
+					}
+					abs, err := config.ExpandUser(raw)
+					if err != nil {
+						fmt.Fprintf(streams.Out, "  %s: %s (expand error: %v)%s\n", r.id, r.path, err, extra)
+						continue
+					}
+					if abs != raw {
+						fmt.Fprintf(streams.Out, "  %s: %s → %s%s\n", r.id, r.path, abs, extra)
+					} else {
+						fmt.Fprintf(streams.Out, "  %s: %s%s\n", r.id, r.path, extra)
+					}
+				}
+			}
+			fmt.Fprintln(streams.Out, "placement: [domains] default <root>/<name> or [[projects]] path (ADR 014); style from placement layers (ADR 013)")
+			stateDir, err := stateDirOrNote()
+			if err != nil {
+				fmt.Fprintf(streams.Out, "state.dir: (%v)\n", err)
+			} else {
+				fmt.Fprintf(streams.Out, "state.dir: %s\n", stateDir)
+			}
 			return nil
 		},
 	})
@@ -704,8 +771,8 @@ subcommand).`, "catalog"),
 		Long: withEnv(`Load catalog.toml and print registered projects as a table.
 
 Prints the declared tag vocabulary, then columns:
-NAME, DOMAIN, PATH, DEFAULT_REPLICA, TAGS, REMOTE.
-path is the catalog value (relative or absolute), not the resolved workspace.
+NAME, DOMAIN, DEFAULT_REPLICA, TAGS, REMOTE.
+Workspace paths are host-local (config.toml [domains] and/or [[projects]]; ADR 014).
 Project tags must be members of the top-level catalog tags list (ADR 010).`, "catalog show"),
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -726,12 +793,11 @@ Project tags must be members of the top-level catalog tags list (ADR 010).`, "ca
 			}
 			fmt.Fprintf(streams.Out, "projects: %d\n", len(cat.Projects))
 			tw := tabwriter.NewWriter(streams.Out, 0, 4, 2, ' ', 0)
-			fmt.Fprintf(tw, "NAME\tDOMAIN\tPATH\tDEFAULT_REPLICA\tTAGS\tREMOTE\n")
+			fmt.Fprintf(tw, "NAME\tDOMAIN\tDEFAULT_REPLICA\tTAGS\tREMOTE\n")
 			for _, p := range cat.Projects {
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
 					p.Name,
 					dash(p.Domain),
-					dash(p.Path),
 					dash(p.DefaultReplica),
 					dash(strings.Join(p.Tags, ",")),
 					dash(p.Remote),
@@ -743,14 +809,17 @@ Project tags must be members of the top-level catalog tags list (ADR 010).`, "ca
 	return root
 }
 
+func stateDirOrNote() (string, error) {
+	return state.Dir()
+}
 
-// requireSubcommand makes parent commands fail on bare invoke or unknown args
-// instead of printing help and exiting 0.
+// requireSubcommand prints the command's help when invoked with no args
+// (e.g. `yerk config`), and errors on unknown trailing args.
 func requireSubcommand(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
 	}
-	return fmt.Errorf("%s: subcommand required", cmd.CommandPath())
+	return cmd.Help()
 }
 
 // selectProjects returns catalog rows for the given identifiers, or the full

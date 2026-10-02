@@ -23,10 +23,11 @@ using the portable samples under [`examples/`](../../examples/).
    ```
 
 2. Edit **`config.toml`**: set `[domains]` roots for **your** host (e.g.
-   `personal = "~/tree/personal"`). Edit **`catalog.toml`**: keep `path`
-   relative to that domain (e.g. `devel/example`) and fix remotes. Style
-   `workspace-dir` places the replica at `<workspace>/<replica>`. Do not
-   commit host-private absolute paths into `examples/` (ADR 007 / 008).
+   `personal = "~/tree/personal/devel"`). Catalog projects then default to
+   `<root>/<name>`. Add `[[projects]]` rows only for path overrides. Edit
+   **`catalog.toml`**: fix remotes; keep it free of host paths (ADR 014).
+   Style `workspace-dir` places the replica at `<workspace>/<replica>`. Do not
+   commit host-private absolute paths into `examples/` (ADR 007).
 
 3. Point yerk at the directory:
 
@@ -43,5 +44,6 @@ using the portable samples under [`examples/`](../../examples/).
 
 - [Configuration reference](../reference/configuration.md)
 - [Environment variables reference](../reference/envvars.md)
-- [ADR 007](../../design/decisions/007-examples-and-host-local-data.md), [ADR 008](../../design/decisions/008-domain-roots-and-relative-catalog-paths.md)
+- [ADR 007](../../design/decisions/007-examples-and-host-local-data.md),
+  [ADR 014](../../design/decisions/014-host-local-path-model.md)
 - Root [README](../../README.md#quick-start)

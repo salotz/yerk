@@ -37,17 +37,15 @@ Environment:
 Missing `config.toml` ⇒ defaults. Missing `catalog.toml` ⇒ empty catalog
 (not an error).
 
-MVP catalog fields per project: `name`, `remote`, optional `domain`, `tags`,
-`default_replica`, `path` (**project workspace** that owns replicas — prefer
-path **relative** to `[domains.<domain>]` in tool config; absolute allowed as
-escape hatch; not a replica checkout path). See
-[ADR 008](./008-domain-roots-and-relative-catalog-paths.md).
+MVP catalog fields per project: `name`, `remote`, required `domain` (ADR 012),
+`tags`, `default_replica`, optional style/method overrides. **No host workspace
+`path`** in the catalog ([ADR 014](./014-host-local-path-model.md)).
 
 Catalog root also declares a closed **tag vocabulary** (`tags = […]`); project
 `tags` must be members of that list ([ADR 010](./010-catalog-tag-vocabulary.md)).
 
-`domain` is a namespace label and, when `path` is relative, the key into
-`config.toml` `[domains]`.
+`domain` is an id namespace label. Optional host `[domains]` roots and
+`[[projects]]` path rows live in tool config (ADR 014).
 
 ## Consequences
 

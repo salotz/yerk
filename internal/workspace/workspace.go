@@ -3,12 +3,13 @@
 // Each catalog project resolves to an absolute **project workspace** directory
 // (the folder that owns that project's replicas), e.g. `…/devel/yerk`.
 //
-// Path resolution (ADR 008):
+// Path resolution (ADR 014):
 //
-//	- absolute catalog path → use as workspace (host escape hatch)
-//	- relative catalog path → join config [domains.<domain>] root + path
+//	1. host [[projects]] absolute or ~/ path
+//	2. host [[projects]] relative path → <domains[domain]>/<path>
+//	3. else → <domains[domain]>/<name>
 //
-// Style decides how a replica distinguisher maps under that workspace:
+// Effective style (ADR 013 placement merge) decides replica math:
 //
 //	workspace-dir: <workspace>/<replica>           → …/yerk/main
 //	project-dir:   <dir(workspace)>/<name>__<replica> → …/yerk__main
@@ -23,35 +24,58 @@ import (
 	"github.com/salotz/yerk/internal/config"
 )
 
-// Style names accepted in config.
+// Style names accepted in config / placement.
 const (
 	StyleWorkspaceDir = "workspace-dir"
 	StyleProjectDir   = "project-dir"
+	// StyleNameTags is reserved (path math in a later phase).
+	StyleNameTags = "name-tags"
 )
 
-// Layout holds workspace policy and domain roots loaded from tool config.
+// Layout holds workspace policy and host config for path lookup.
 type Layout struct {
-	Style   string
-	Domains map[string]string
+	Style string
+	Host  config.Config
+	// Warnf, if set, receives soft warnings (unused for path math today).
+	Warnf func(format string, args ...any)
 }
 
 // NewLayout builds a Layout from full tool config, applying defaults.
+// Prefer NewLayoutStyle when effective style comes from placement.Resolve.
 func NewLayout(cfg config.Config) (Layout, error) {
 	style := cfg.Workspace.Style
 	if style == "" {
 		style = StyleWorkspaceDir
 	}
-	switch style {
+	return NewLayoutStyle(style, cfg, nil)
+}
+
+// NewLayoutStyle builds a Layout with an explicit effective style (ADR 013).
+func NewLayoutStyle(style string, host config.Config, warnf func(string, ...any)) (Layout, error) {
+	style = strings.TrimSpace(style)
+	if style == "" {
+		style = StyleWorkspaceDir
+	}
+	if err := ValidateStyle(style); err != nil {
+		return Layout{}, err
+	}
+	return Layout{Style: style, Host: host, Warnf: warnf}, nil
+}
+
+// ValidateStyle reports whether style is known for path math.
+// name-tags is recognized as locked but not implemented yet.
+func ValidateStyle(style string) error {
+	switch strings.TrimSpace(style) {
 	case StyleWorkspaceDir, StyleProjectDir:
+		return nil
+	case StyleNameTags:
+		return fmt.Errorf("workspace style %q is not implemented yet (path math ships in a later phase)", StyleNameTags)
+	case "":
+		return fmt.Errorf("empty workspace style")
 	default:
-		return Layout{}, fmt.Errorf("unknown workspace style %q (want %s or %s)",
+		return fmt.Errorf("unknown workspace style %q (want %s or %s)",
 			style, StyleWorkspaceDir, StyleProjectDir)
 	}
-	domains := cfg.Domains
-	if domains == nil {
-		domains = map[string]string{}
-	}
-	return Layout{Style: style, Domains: domains}, nil
 }
 
 // ProjectDir returns the absolute project workspace directory.
@@ -95,43 +119,7 @@ func (l Layout) ReplicaDir(p config.Project, replica string) (string, error) {
 }
 
 func (l Layout) projectWorkspace(p config.Project) (string, error) {
-	raw := strings.TrimSpace(p.Path)
-	name := strings.TrimSpace(p.Name)
-	if name == "" {
-		name = "?"
-	}
-	if raw == "" {
-		return "", fmt.Errorf("project %q has no path: set catalog path relative to the domain root (e.g. devel/yerk) or an absolute project workspace", name)
-	}
-
-	expanded, err := config.ExpandUser(raw)
-	if err != nil {
-		return "", fmt.Errorf("project %q path: %w", name, err)
-	}
-
-	if filepath.IsAbs(expanded) {
-		return filepath.Clean(expanded), nil
-	}
-
-	// Relative: require domain + configured domain root.
-	domain := strings.TrimSpace(p.Domain)
-	if domain == "" {
-		return "", fmt.Errorf("project %q path %q is relative but domain is empty: set domain to select [domains.<name>] in config.toml, or use an absolute path", name, raw)
-	}
-	root, ok, err := l.domainRoot(domain)
-	if err != nil {
-		return "", fmt.Errorf("project %q: %w", name, err)
-	}
-	if !ok {
-		return "", fmt.Errorf("project %q domain %q has no root in config.toml [domains]; add e.g. %s = \"~/tree/%s\"", name, domain, domain, domain)
-	}
-	return filepath.Join(root, filepath.Clean(expanded)), nil
-}
-
-func (l Layout) domainRoot(domain string) (string, bool, error) {
-	// Reuse Config.DomainRoot logic via a transient Config so ~ expansion stays one place.
-	cfg := config.Config{Domains: l.Domains}
-	return cfg.DomainRoot(domain)
+	return l.Host.ProjectWorkspacePath(p.Domain, p.Name)
 }
 
 // EnsureDir creates dir (mkdir -p). Never deletes.

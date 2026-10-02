@@ -23,14 +23,14 @@ It speaks PRJX vocabulary; it does not redefine the PRJX spec.
 
 | Noun | Meaning |
 | --- | --- |
-| **Project** | Named unit of software work managed on this host. Catalog identity is a short `name`. Optional `domain` namespaces the project and selects a host domain root when `path` is relative. MVP assumes one primary **remote**; multi-remote is allowed later. |
+| **Project** | Named unit of software work managed on this host. Catalog identity is required `domain` + `name` (bare id `domain/name`, URI `yerk://…`; ADR 012). MVP assumes one primary **remote**; multi-remote is allowed later. |
 | **Catalog** | Host-global registry of projects (`catalog.toml`). Source of truth for *what* exists. |
-| **Config (tool)** | Host/tool behavior (`config.toml`): workspace **style**, probe defaults, later hooks. Source of truth for *how on this host*. May differ per machine. |
+| **Config (tool)** | Host/tool behavior (`config.toml`): workspace **style**, optional **`[domains]`** roots, optional host **`[[projects]]`** rows (path overrides, later knobs). Source of truth for *how on this host*. May differ per machine. |
 | **Remote** | Clone URI (git URL or path) for the project’s canonical VCS content. |
-| **Domain** | Namespace / context label on a project (e.g. `personal`, `examol`). Selects a host domain root when `path` is relative (ADR 008). |
+| **Domain** | Logical namespace on a project (e.g. `personal`). Required for ids/URIs (ADR 012). Optional host `[domains]` root is a convenience default, not identity (ADR 014). |
 | **Tag** | Declared bulk-select label. Catalog root `tags = […]` is a **closed vocabulary**; each project’s `tags` must be members (ADR 010). Orthogonal to domain. |
-| **Project workspace** | On-disk directory that **owns** a project's replicas. Catalog `path` points here (e.g. `…/devel/yerk`). Not a git checkout. |
-| **Workspace (policy)** | How replicas are placed relative to each project workspace (`style`). A shared host-wide root for every project is deferred. |
+| **Project workspace** | On-disk directory that **owns** a project's replicas. Default `<domains[domain]>/<name>` or host `[[projects]]` path (ADR 014). Not a git checkout. |
+| **Workspace (policy)** | How replicas are placed relative to each project workspace (`style`). Effective style merges host / dir-local / catalog / **host state** / env / CLI (ADR 013). |
 | **Replica** | One concrete on-disk checkout of a project on this host (PRJX), e.g. `…/yerk/main`. |
 | **Replica distinguisher** | Token separating replicas of the same project (often default branch short name). |
 | **Change status** | Observed git dirtiness / sync flags for a replica. |
@@ -41,7 +41,7 @@ It speaks PRJX vocabulary; it does not redefine the PRJX spec.
 
 - Project ≠ directory; a project may have zero or many replicas.
 - Replica ≠ branch; branch is git; replica is host placement (often tracking a branch).
-- **Project workspace ≠ replica**; catalog `path` is the workspace (`…/yerk`), not `…/yerk/main`.
+- **Project workspace ≠ replica**; workspace is the parent layout base (`…/yerk`), not `…/yerk/main`.
 - Workspace policy ≠ one global root (yet); style applies under each project's path.
 - Tag ≠ domain.
 - `yerk` ≠ PRJX (tool vs spec).
@@ -210,15 +210,20 @@ ephemeral `.agents/plans/<owner>/` (not durable product docs).
 
 ## Workspace placement (near-term)
 
-1. **Resolve project workspace** from catalog + host domains ([ADR 008](./decisions/008-domain-roots-and-relative-catalog-paths.md)):
+1. **Resolve project workspace** from host config only ([ADR 014](./decisions/014-host-local-path-model.md)):
 
-   | Catalog `path` | Workspace |
+   | Host placement | Workspace |
    | --- | --- |
-   | Relative | `<domains[domain]>/<path>` (domain required) |
-   | Absolute (`~/` ok) | that path (host escape hatch) |
+   | `[[projects]]` absolute / `~/` path | that path |
+   | `[[projects]]` relative path | `<domains[domain]>/<path>` |
+   | No host path (typical) | `<domains[domain]>/<name>` |
 
-2. Tool config **`[workspace].style`** maps replica distinguisher `R` under
-   that workspace:
+   Catalog has **no** `path`. Domain roots are **optional**; without a root,
+   supply a full host path. Choose the root so `<root>/<name>` matches the
+   usual tree (often a host `devel` directory).
+
+2. Tool config **`[workspace].style`** (plus placement layers, ADR 013) maps
+   replica distinguisher `R` under that workspace:
 
 | Style | Replica path | Example |
 | --- | --- | --- |
@@ -234,13 +239,14 @@ Under `$XDG_CONFIG_HOME/yerk` (see ADR 004):
 
 | File | Owns |
 | --- | --- |
-| `config.toml` | Tool/host behavior: `[workspace].style`, `[domains]` roots, future defaults. |
-| `catalog.toml` | Root `tags = […]` vocabulary + `[[projects]]` registry (prefer relative project-workspace `path`). |
+| `config.toml` | Tool/host behavior: `[workspace].style`, optional `[domains]` roots, optional host `[[projects]]` overrides. |
+| `catalog.toml` | Root `tags = […]` vocabulary + portable `[[projects]]` registry (no host paths). |
 
 Env:
 
 - `YERK__CONFIG` / `YERK__CONFIG_DIR` — tool config (existing direction).
 - `YERK__CATALOG` — explicit catalog file path.
+- `YERK__STATE_DIR` — project bindings (ADR 013).
 - `YERK__WORKSPACE_STYLE` — optional style overlay.
 
 Missing catalog ⇒ empty registry. Missing config ⇒ defaults.
@@ -256,7 +262,7 @@ domain = "personal"
 remote = "git@github.com:salotz/yerk.git"
 tags = ["devel"]
 # default_replica = ""    # empty → remote HEAD branch name
-path = "devel/yerk"       # → <domains.personal>/devel/yerk (not …/yerk/main)
+# no path — host config places the workspace
 ```
 
 ### Tool config (MVP sketch)
@@ -266,7 +272,12 @@ path = "devel/yerk"       # → <domains.personal>/devel/yerk (not …/yerk/main
 style = "workspace-dir"   # → <workspace>/<replica>
 
 [domains]
-personal = "~/tree/personal"
+personal = "~/tree/personal/devel"   # personal/yerk → …/devel/yerk
+
+# [[projects]] only for exceptions:
+# name = "bimker"
+# domain = "personal"
+# path = "~/.bimker"
 ```
 
 ---

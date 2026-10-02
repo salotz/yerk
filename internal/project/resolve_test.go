@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/salotz/yerk/internal/api"
@@ -40,17 +41,34 @@ func (f fakeGit) Probe(ctx context.Context, repoPath string) (gitcmd.ProbeResult
 	return f.probe, nil
 }
 
+func hostProjects(root string, pairs ...string) []config.HostProject {
+	var out []config.HostProject
+	for i := 0; i+1 < len(pairs); i += 2 {
+		id := pairs[i] // domain/name
+		domain, name, ok := strings.Cut(id, "/")
+		if !ok {
+			panic("bad id " + id)
+		}
+		out = append(out, config.HostProject{
+			Domain: domain, Name: name, Path: filepath.Join(root, pairs[i+1]),
+		})
+	}
+	return out
+}
+
 func TestStatusPresenceOnly(t *testing.T) {
 	root := t.TempDir()
-	domainRoot := filepath.Join(root, "personal")
-	yerkWS := filepath.Join(domainRoot, "devel", "yerk")
+	yerkWS := filepath.Join(root, "devel", "yerk")
 	yerkReplica := filepath.Join(yerkWS, "main")
 	if err := os.MkdirAll(filepath.Join(yerkReplica, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	cfg := config.Config{
 		Workspace: config.Workspace{Style: "workspace-dir"},
-		Domains:   map[string]string{"personal": domainRoot},
+		Projects: hostProjects(root,
+			"personal/yerk", "devel/yerk",
+			"personal/bimhaw", "devel/bimhaw",
+		),
 	}
 	r, err := project.NewResolver(cfg, fakeGit{
 		probe: gitcmd.ProbeResult{Clean: true, Branch: "main", NoUpstream: true},
@@ -59,8 +77,8 @@ func TestStatusPresenceOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	cat := config.Catalog{Projects: []config.Project{
-		{Name: "yerk", Domain: "personal", Remote: "x", Path: "devel/yerk", DefaultReplica: "main"},
-		{Name: "bimhaw", Domain: "personal", Remote: "y", Path: "devel/bimhaw", DefaultReplica: "main"},
+		{Name: "yerk", Domain: "personal", Remote: "x", DefaultReplica: "main"},
+		{Name: "bimhaw", Domain: "personal", Remote: "y", DefaultReplica: "main"},
 	}}
 	rows, err := r.Status(context.Background(), cat.Projects, project.StatusOptions{})
 	if err != nil {
@@ -81,7 +99,7 @@ func TestStatusPresenceOnly(t *testing.T) {
 	if rows[1].Project != "bimhaw" || rows[1].Presence != api.PresenceMissing {
 		t.Fatalf("bimhaw: %+v", rows[1])
 	}
-	wantMissing := filepath.Join(domainRoot, "devel", "bimhaw", "main")
+	wantMissing := filepath.Join(root, "devel", "bimhaw", "main")
 	if rows[1].Path != wantMissing {
 		t.Fatalf("bimhaw path: got %q want %q", rows[1].Path, wantMissing)
 	}
@@ -100,15 +118,14 @@ func TestStatusPresenceOnly(t *testing.T) {
 
 func TestProjectStatus(t *testing.T) {
 	root := t.TempDir()
-	domainRoot := filepath.Join(root, "personal")
-	yerkWS := filepath.Join(domainRoot, "devel", "yerk")
+	yerkWS := filepath.Join(root, "devel", "yerk")
 	yerkReplica := filepath.Join(yerkWS, "main")
 	if err := os.MkdirAll(filepath.Join(yerkReplica, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	cfg := config.Config{
 		Workspace: config.Workspace{Style: "workspace-dir"},
-		Domains:   map[string]string{"personal": domainRoot},
+		Projects:  hostProjects(root, "personal/yerk", "devel/yerk"),
 	}
 	r, err := project.NewResolver(cfg, fakeGit{
 		probe: gitcmd.ProbeResult{Clean: true, Branch: "main", NoUpstream: true},
@@ -118,7 +135,7 @@ func TestProjectStatus(t *testing.T) {
 	}
 	p := config.Project{
 		Name: "yerk", Domain: "personal", Remote: "x",
-		Path: "devel/yerk", DefaultReplica: "main", Tags: []string{"devel"},
+		DefaultReplica: "main", Tags: []string{"devel"},
 	}
 	st, err := r.ProjectStatus(context.Background(), p, project.StatusOptions{Git: true})
 	if err != nil {
@@ -157,14 +174,13 @@ func TestProjectStatus(t *testing.T) {
 
 func TestReplicaStatusNamed(t *testing.T) {
 	root := t.TempDir()
-	domainRoot := filepath.Join(root, "personal")
-	feature := filepath.Join(domainRoot, "devel", "yerk", "feature")
+	feature := filepath.Join(root, "devel", "yerk", "feature")
 	if err := os.MkdirAll(filepath.Join(feature, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	cfg := config.Config{
 		Workspace: config.Workspace{Style: "workspace-dir"},
-		Domains:   map[string]string{"personal": domainRoot},
+		Projects:  hostProjects(root, "personal/yerk", "devel/yerk"),
 	}
 	r, err := project.NewResolver(cfg, fakeGit{
 		probe: gitcmd.ProbeResult{Dirty: true, Branch: "feature", NoUpstream: true},
@@ -172,7 +188,7 @@ func TestReplicaStatusNamed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := config.Project{Name: "yerk", Domain: "personal", Remote: "x", Path: "devel/yerk", DefaultReplica: "main"}
+	p := config.Project{Name: "yerk", Domain: "personal", Remote: "x", DefaultReplica: "main"}
 	row, err := r.ReplicaStatus(context.Background(), p, "feature", project.StatusOptions{Git: true})
 	if err != nil {
 		t.Fatal(err)
@@ -185,33 +201,18 @@ func TestReplicaStatusNamed(t *testing.T) {
 	}
 }
 
-func TestStatusRequiresPath(t *testing.T) {
+func TestStatusRequiresProjectPath(t *testing.T) {
 	cfg := config.Config{Workspace: config.Workspace{Style: "workspace-dir"}}
 	r, err := project.NewResolver(cfg, fakeGit{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	cat := config.Catalog{Projects: []config.Project{
-		{Name: "yerk", Remote: "x", DefaultReplica: "main"},
+		{Name: "yerk", Domain: "personal", Remote: "x", DefaultReplica: "main"},
 	}}
 	_, err = r.Status(context.Background(), cat.Projects, project.StatusOptions{})
-	if err == nil {
-		t.Fatal("expected missing path error")
-	}
-}
-
-func TestStatusRelativeNeedsDomain(t *testing.T) {
-	cfg := config.Config{Workspace: config.Workspace{Style: "workspace-dir"}}
-	r, err := project.NewResolver(cfg, fakeGit{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	cat := config.Catalog{Projects: []config.Project{
-		{Name: "yerk", Domain: "personal", Remote: "x", Path: "devel/yerk", DefaultReplica: "main"},
-	}}
-	_, err = r.Status(context.Background(), cat.Projects, project.StatusOptions{})
-	if err == nil {
-		t.Fatal("expected missing domain root error")
+	if err == nil || !strings.Contains(err.Error(), "[[projects]]") {
+		t.Fatalf("expected missing [[projects]] error, got %v", err)
 	}
 }
 

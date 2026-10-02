@@ -15,7 +15,6 @@ func ProjectFromConfig(p config.Project) Project {
 		Name:           p.Name,
 		Domain:         p.Domain,
 		Remote:         p.Remote,
-		Path:           p.Path,
 		DefaultReplica: p.DefaultReplica,
 		Tags:           copyStrings(p.Tags),
 	}

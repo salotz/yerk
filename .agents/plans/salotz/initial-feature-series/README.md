@@ -19,8 +19,8 @@ no staging unless asked, answers only in `decisions.md`).
 |---|--------|--------|
 | 0 | Lock decisions | **done** (Q1–Q33 locked) |
 | 1 | Identifiers / `yerk://` (P13) | **done** (ADR 012 + `internal/id` + CLI) |
-| 2 | Placement policy + host state (P10) | pending (next) |
-| 3 | Project/replica get + lookup (P14) | pending |
+| 2 | Placement policy + host state (P10) | **done** (ADR 013/014; optional `[domains]` default; placement/state + wire) |
+| 3 | Project/replica get + lookup (P14) | **next** |
 | 4 | `config resolve` stack (P15) | pending |
 | 5 | `materialize` + `replica create` (P11) | partial (`materialize` rename done; create pending) |
 | 6 | Agent context dumps (P16) | pending |

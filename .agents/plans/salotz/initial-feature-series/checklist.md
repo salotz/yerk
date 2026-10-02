@@ -22,17 +22,20 @@ Do not put operator answers here (use [decisions.md](./decisions.md)).
 
 ## Phase 2 — Placement policy + host state
 
-- [ ] ADR: layers, XDG state vs config, dir-local walk, main replica
-- [ ] ADR: path model successor to ADR 008 (host-local; no domain-root join)
-- [ ] Merge pipeline → effective placement
-- [ ] State read/write under `$XDG_STATE_HOME/yerk/projects/<domain>/<project>/state.json`
-- [ ] Init binding on ensure / materialize / replica create
-- [ ] Warn ambient drift; error explicit CLI contradiction
-- [ ] Tests: precedence, conflicts, temp XDG + dir-local
-- [ ] Docs + portable examples only (ADR 007)
-- [ ] Env: `YERK__STATE_DIR` in envvars + `.appinfo`
+- [x] ADR: layers, XDG state vs config, dir-local walk, main replica (ADR 013)
+- [x] ADR: path model successor to ADR 008 (host-local; optional `[domains]` default `<root>/<name>`; full path only when needed) (ADR 014)
+- [x] Merge pipeline → effective placement (`internal/placement`)
+- [x] State read/write under `$XDG_STATE_HOME/yerk/projects/<domain>/<project>/state.json`
+- [x] Init binding on ensure / materialize (replica create later)
+- [x] Warn ambient drift; error explicit CLI contradiction
+- [x] Tests: precedence, conflicts, temp XDG + dir-local
+- [x] Docs + portable examples only (ADR 007)
+- [x] Env: `YERK__STATE_DIR` in envvars + `.appinfo`
+- [x] Follow-up: domain-root default so most projects need no host path row
+- [x] Follow-up: host dogfood `[domains]` + exception-only `[[projects]]`
+- [x] Close-out tidy: stale ADR/docs refs, `*~` backups removed, repo-map packages
 
-## Phase 3 — get + lookup
+## Phase 3 — get + lookup  **← next**
 
 - [ ] ADR/CLI: `get`, `project|replica get`, `lookup` / noun lookup
 - [ ] Payloads: catalog + paths + presence + placement + URI

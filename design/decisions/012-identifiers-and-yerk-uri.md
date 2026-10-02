@@ -112,8 +112,8 @@ lookup feature (not defined here).
 - Catalog validation tightens: non-empty `domain` on every project.
 - Name-only `Catalog.Find` remains a low-level helper; CLI should prefer
   resolve/expand so `domain/name` and URIs work.
-- Docs must teach id vs on-disk path; examples keep portable `domain` +
-  relative path until the placement ADR supersedes path join (ADR 008).
+- Docs must teach id vs on-disk path; host placement is ADR 014 (optional
+  domain roots / host `[[projects]]`), not catalog path.
 - OS-level `yerk://` URL handler is **out of scope**.
 - Host project state paths under XDG state should nest as
   `projects/<domain>/<project>/` using the same segment strings (placement
@@ -123,7 +123,6 @@ lookup feature (not defined here).
 
 - [011](./011-api-resources.md) — resource shapes / `yerk/v1`
 - [004](./004-config-and-catalog-split.md) — catalog file identity fields
-- [008](./008-domain-roots-and-relative-catalog-paths.md) — path join (placement
-  successor will stop treating domain as filesystem root; domain remains the
-  **id** namespace)
+- [008](./008-domain-roots-and-relative-catalog-paths.md) — prior path join
+- [014](./014-host-local-path-model.md) — host placement; domain remains the **id** namespace
 - [domain-and-near-term.md](../domain-and-near-term.md)

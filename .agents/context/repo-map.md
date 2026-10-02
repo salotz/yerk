@@ -21,7 +21,10 @@ FQ name: `salotz.yerk`
 - `internal/api` — stable resource types (ADR 011)
 - `internal/config` — XDG TOML config + catalog load
 - `internal/project` — resolve / status collectors → api resources
-- `internal/workspace` — replica path styles (MVP)
+- `internal/workspace` — replica path styles
+- `internal/placement` — effective style merge (ADR 013)
+- `internal/state` — host project bindings under XDG state
+- `internal/id` — bare id / `yerk://` parse + expand (ADR 012)
 - `internal/gitcmd` / `internal/presence` — git adapter + presence
 - `internal/envvars` — env registry for help/live dumps
 - `internal/version` — ldflags-friendly identity
@@ -29,11 +32,11 @@ FQ name: `salotz.yerk`
 ## Out of tree (operator notes)
 
 - **Workspace-local agent context (RFC 23):** parent of this replica is the
-  yerk **project workspace** (`…/yerk/` → checkout `main/`). Catalog uses
-  relative `path` under domain root (ADR 008), not the replica path. Host
-  dogfood guidance for updating `~/.config/yerk/` lives in `…/yerk/.agents/`
-  (not in this remote tree). Optional RFC 26/PRJX host-local project files:
-  `…/yerk/.local/`.
+  yerk **project workspace** (`…/yerk/` → checkout `main/`). Host placement
+  uses optional `[domains]` default `<root>/<name>` and optional host
+  `[[projects]]` paths (ADR 014); catalog has no path. Host dogfood guidance
+  for updating `~/.config/yerk/` lives in `…/yerk/.agents/` (not in this
+  remote tree). Optional RFC 26/PRJX host-local project files: `…/yerk/.local/`.
 - Design brainstorm lives in the personal org silo idea note:
 
 `admin/org/notes/todo/ideas/20260925T115055--software-project-management-tool__dev_software_todo.org`

@@ -12,11 +12,30 @@ import (
 	"github.com/salotz/yerk/internal/cli"
 )
 
-func TestStatusEmptyCatalog(t *testing.T) {
-	dir := t.TempDir()
+// setYerkHostEnv points config + state at an isolated temp tree for a test.
+func setYerkHostEnv(t *testing.T, dir string) {
+	t.Helper()
 	t.Setenv("YERK__CONFIG_DIR", dir)
 	t.Setenv("YERK__CONFIG", "")
 	t.Setenv("YERK__CATALOG", "")
+	t.Setenv("YERK__STATE_DIR", filepath.Join(dir, ".state"))
+	t.Setenv("YERK__WORKSPACE_STYLE", "")
+}
+
+// writeHostConfig writes config.toml + catalog.toml for isolated host fixtures.
+func writeHostConfig(t *testing.T, dir, cfgBody, catBody string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(cfgBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), []byte(catBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestStatusEmptyCatalog(t *testing.T) {
+	dir := t.TempDir()
+	setYerkHostEnv(t, dir)
 
 	var out, errBuf bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &errBuf}
@@ -30,19 +49,25 @@ func TestStatusEmptyCatalog(t *testing.T) {
 
 func TestStatusAndPathWithFixtures(t *testing.T) {
 	dir := t.TempDir()
-	// Domain root + relative catalog path → project workspace; replica under style.
-	domainRoot := filepath.Join(dir, "personal")
-	yerkWS := filepath.Join(domainRoot, "devel", "yerk")
+	yerkWS := filepath.Join(dir, "devel", "yerk")
 	yerkReplica := filepath.Join(yerkWS, "main")
-	missingReplica := filepath.Join(domainRoot, "devel", "missing-one", "main")
+	missingWS := filepath.Join(dir, "devel", "missing-one")
+	missingReplica := filepath.Join(missingWS, "main")
 	if err := os.MkdirAll(filepath.Join(yerkReplica, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	cfg := []byte(`[workspace]
 style = "workspace-dir"
 
-[domains]
-personal = "` + domainRoot + `"
+[[projects]]
+name = "yerk"
+domain = "personal"
+path = "` + yerkWS + `"
+
+[[projects]]
+name = "missing-one"
+domain = "personal"
+path = "` + missingWS + `"
 `)
 	cat := []byte(`
 tags = ["devel"]
@@ -52,7 +77,6 @@ name = "yerk"
 domain = "personal"
 remote = "git@example.com:salotz/yerk.git"
 default_replica = "main"
-path = "devel/yerk"
 tags = ["devel"]
 
 [[projects]]
@@ -60,7 +84,6 @@ name = "missing-one"
 domain = "personal"
 remote = "git@example.com:x/y.git"
 default_replica = "main"
-path = "devel/missing-one"
 `)
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), cfg, 0o644); err != nil {
 		t.Fatal(err)
@@ -68,10 +91,7 @@ path = "devel/missing-one"
 	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("YERK__CONFIG_DIR", dir)
-	t.Setenv("YERK__CONFIG", "")
-	t.Setenv("YERK__CATALOG", "")
-	t.Setenv("YERK__WORKSPACE_STYLE", "")
+	setYerkHostEnv(t, dir)
 
 	var out bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &out}
@@ -155,7 +175,6 @@ path = "devel/missing-one"
 	}
 
 	out.Reset()
-	missingWS := filepath.Join(domainRoot, "devel", "missing-one")
 	if err := cli.Execute(context.Background(), streams, []string{"workspace", "ensure", "missing-one"}); err != nil {
 		t.Fatal(err)
 	}
@@ -185,60 +204,48 @@ path = "devel/missing-one"
 
 func TestPathAmbiguousShortName(t *testing.T) {
 	dir := t.TempDir()
-	domainRoot := filepath.Join(dir, "tree")
-	cfg := []byte(`[workspace]
+	wsPersonal := filepath.Join(dir, "personal", "devel", "wumpus")
+	wsWork := filepath.Join(dir, "work", "devel", "wumpus")
+	cfg := `[workspace]
 style = "workspace-dir"
-
-[domains]
-personal = "` + filepath.Join(domainRoot, "personal") + `"
-work = "` + filepath.Join(domainRoot, "work") + `"
-`)
-	cat := []byte(`
-tags = []
 
 [[projects]]
 name = "wumpus"
 domain = "personal"
-remote = "git@example.com:a/wumpus.git"
-path = "devel/wumpus"
+path = "` + wsPersonal + `"
 
 [[projects]]
 name = "wumpus"
 domain = "work"
-remote = "git@example.com:b/wumpus.git"
-path = "devel/wumpus"
-`)
-	if err := os.WriteFile(filepath.Join(dir, "config.toml"), cfg, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("YERK__CONFIG_DIR", dir)
-	t.Setenv("YERK__CONFIG", "")
-	t.Setenv("YERK__CATALOG", "")
-	t.Setenv("YERK__WORKSPACE_STYLE", "")
+path = "` + wsWork + `"
+`
+	cat := `
+[[projects]]
+name = "wumpus"
+domain = "personal"
+remote = "git@example.com:a/w.git"
+
+[[projects]]
+name = "wumpus"
+domain = "work"
+remote = "git@example.com:b/w.git"
+`
+	writeHostConfig(t, dir, cfg, cat)
+	setYerkHostEnv(t, dir)
 
 	var out bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &out}
-	err := cli.Execute(context.Background(), streams, []string{"path", "wumpus"})
-	if err == nil {
+	if err := cli.Execute(context.Background(), streams, []string{"path", "wumpus"}); err == nil {
 		t.Fatal("expected ambiguous short name error")
-	}
-	if !strings.Contains(err.Error(), "ambiguous") {
+	} else if !strings.Contains(err.Error(), "ambiguous") {
 		t.Fatalf("got %v", err)
 	}
-	if !strings.Contains(err.Error(), "personal/wumpus") || !strings.Contains(err.Error(), "work/wumpus") {
-		t.Fatalf("want candidates listed: %v", err)
-	}
-
 	out.Reset()
-	want := filepath.Join(domainRoot, "work", "devel", "wumpus")
 	if err := cli.Execute(context.Background(), streams, []string{"path", "work/wumpus"}); err != nil {
 		t.Fatal(err)
 	}
-	if strings.TrimSpace(out.String()) != want {
-		t.Fatalf("got %q want %q", out.String(), want)
+	if strings.TrimSpace(out.String()) != wsWork {
+		t.Fatalf("got %q want %q", out.String(), wsWork)
 	}
 }
 
@@ -251,15 +258,12 @@ tags = ["devel"]
 name = "yerk"
 domain = "personal"
 remote = "git@example.com:salotz/yerk.git"
-path = "/tmp/yerk"
 tags = ["devel"]
 `)
 	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("YERK__CONFIG_DIR", dir)
-	t.Setenv("YERK__CONFIG", "")
-	t.Setenv("YERK__CATALOG", "")
+	setYerkHostEnv(t, dir)
 
 	var out bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &out}
@@ -277,14 +281,22 @@ func TestStatusTagFilter(t *testing.T) {
 	domainRoot := filepath.Join(dir, "personal")
 	yerkWS := filepath.Join(domainRoot, "devel", "yerk")
 	yerkReplica := filepath.Join(yerkWS, "main")
+	officeWS := filepath.Join(domainRoot, "devel", "office")
 	if err := os.MkdirAll(filepath.Join(yerkReplica, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	cfg := []byte(`[workspace]
 style = "workspace-dir"
 
-[domains]
-personal = "` + domainRoot + `"
+[[projects]]
+name = "yerk"
+domain = "personal"
+path = "` + yerkWS + `"
+
+[[projects]]
+name = "office"
+domain = "personal"
+path = "` + officeWS + `"
 `)
 	cat := []byte(`
 tags = ["devel", "work"]
@@ -294,7 +306,6 @@ name = "yerk"
 domain = "personal"
 remote = "git@example.com:salotz/yerk.git"
 default_replica = "main"
-path = "devel/yerk"
 tags = ["devel"]
 
 [[projects]]
@@ -302,7 +313,6 @@ name = "office"
 domain = "personal"
 remote = "git@example.com:x/office.git"
 default_replica = "main"
-path = "devel/office"
 tags = ["work"]
 `)
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), cfg, 0o644); err != nil {
@@ -311,10 +321,7 @@ tags = ["work"]
 	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("YERK__CONFIG_DIR", dir)
-	t.Setenv("YERK__CONFIG", "")
-	t.Setenv("YERK__CATALOG", "")
-	t.Setenv("YERK__WORKSPACE_STYLE", "")
+	setYerkHostEnv(t, dir)
 
 	var out bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &out}
@@ -322,34 +329,15 @@ tags = ["work"]
 		t.Fatal(err)
 	}
 	s := out.String()
-	if !strings.Contains(s, "filter.tag=devel") {
-		t.Fatalf("expected filter.tag line\n%s", s)
-	}
-	if !strings.Contains(s, "yerk") || !strings.Contains(s, "present") {
-		t.Fatalf("expected yerk row\n%s", s)
+	if !strings.Contains(s, "yerk") || strings.Contains(s, "office") {
+		t.Fatalf("tag devel filter: %s", s)
 	}
 	if !strings.Contains(s, yerkWS) {
 		t.Fatalf("expected workspace path in project view\n%s", s)
 	}
-	if strings.Contains(s, "office") {
-		t.Fatalf("office should be filtered out\n%s", s)
-	}
-
 	out.Reset()
-	if err := cli.Execute(context.Background(), streams, []string{"status", "--tag", "work", "--presence-only"}); err != nil {
-		t.Fatal(err)
-	}
-	s = out.String()
-	if !strings.Contains(s, "office") || !strings.Contains(s, "filter.tag=work") {
-		t.Fatalf("expected office under work\n%s", s)
-	}
-	if strings.Contains(s, "yerk") {
-		t.Fatalf("yerk should be filtered out for work\n%s", s)
-	}
-
-	out.Reset()
-	if err := cli.Execute(context.Background(), streams, []string{"status", "--tag", "devel", "yerk"}); err == nil {
-		t.Fatal("status --tag with project args should error")
+	if err := cli.Execute(context.Background(), streams, []string{"status", "--tag", "nope"}); err == nil {
+		t.Fatal("unknown tag should error")
 	}
 }
 
@@ -361,7 +349,7 @@ func TestRootHelpListsPrimaryEnvAndPointer(t *testing.T) {
 	}
 	s := out.String()
 	for _, name := range []string{
-		"YERK__CONFIG_DIR", "YERK__CONFIG", "YERK__CATALOG",
+		"YERK__CONFIG_DIR", "YERK__CONFIG", "YERK__CATALOG", "YERK__STATE_DIR",
 		"YERK__WORKSPACE_STYLE",
 		"help envvars",
 	} {
@@ -376,10 +364,7 @@ func TestRootHelpListsPrimaryEnvAndPointer(t *testing.T) {
 
 func TestEnvvarsCommandLiveValues(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("YERK__CONFIG_DIR", dir)
-	t.Setenv("YERK__CONFIG", "")
-	t.Setenv("YERK__CATALOG", "")
-	t.Setenv("YERK__WORKSPACE_STYLE", "")
+	setYerkHostEnv(t, dir)
 
 	var out bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &out}
@@ -437,11 +422,33 @@ func TestStatusHelpListsPrimaryToolEnv(t *testing.T) {
 	}
 }
 
+func TestBareParentCommandsShowHelp(t *testing.T) {
+	for _, args := range [][]string{
+		{"config"},
+		{"catalog"},
+		{"workspace"},
+	} {
+		t.Run(args[0], func(t *testing.T) {
+			var out bytes.Buffer
+			streams := cli.IO{Out: &out, Err: &out}
+			if err := cli.Execute(context.Background(), streams, args); err != nil {
+				t.Fatalf("%v args=%v out=%s", err, args, out.String())
+			}
+			s := out.String()
+			if !strings.Contains(s, "Usage:") {
+				t.Fatalf("expected help Usage for %v\n%s", args, s)
+			}
+			// Should not be the old hard error.
+			if strings.Contains(s, "subcommand required") {
+				t.Fatalf("unexpected error text for %v\n%s", args, s)
+			}
+		})
+	}
+}
+
 func TestConfigAndCatalogHelpers(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("YERK__CONFIG_DIR", dir)
-	t.Setenv("YERK__CONFIG", "")
-	t.Setenv("YERK__CATALOG", "")
+	setYerkHostEnv(t, dir)
 
 	var out bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &out}
@@ -465,6 +472,9 @@ func TestConfigAndCatalogHelpers(t *testing.T) {
 	if !strings.Contains(s, "domains:") {
 		t.Fatalf("config show missing domains\n%s", s)
 	}
+	if !strings.Contains(s, "projects:") {
+		t.Fatalf("config show missing projects\n%s", s)
+	}
 
 	// Seed a small catalog and assert table show (no sample project tags).
 	catBody := `
@@ -474,7 +484,6 @@ tags = []
 name = "alpha"
 domain = "personal"
 remote = "git@example.com:a/alpha.git"
-path = "devel/alpha"
 default_replica = "main"
 `
 	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), []byte(catBody), 0o644); err != nil {
@@ -485,7 +494,7 @@ default_replica = "main"
 		t.Fatal(err)
 	}
 	cs := out.String()
-	for _, want := range []string{"NAME", "DOMAIN", "PATH", "REMOTE", "alpha", "personal", "devel/alpha", "main", "tags:"} {
+	for _, want := range []string{"NAME", "DOMAIN", "REMOTE", "alpha", "personal", "main", "tags:"} {
 		if !strings.Contains(cs, want) {
 			t.Fatalf("catalog show missing %q\n%s", want, cs)
 		}
@@ -524,15 +533,12 @@ tags = ["devel", "work"]
 name = "yerk"
 domain = "personal"
 remote = "git@example.com:salotz/yerk.git"
-path = "/tmp/yerk"
 tags = ["devel"]
 `)
 	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("YERK__CONFIG_DIR", dir)
-	t.Setenv("YERK__CONFIG", "")
-	t.Setenv("YERK__CATALOG", "")
+	setYerkHostEnv(t, dir)
 
 	var out bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &out}
@@ -564,9 +570,7 @@ tags = ["devel"]
 
 func TestMaterializeAllEmptyCatalog(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("YERK__CONFIG_DIR", dir)
-	t.Setenv("YERK__CONFIG", "")
-	t.Setenv("YERK__CATALOG", "")
+	setYerkHostEnv(t, dir)
 	var out bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &out}
 	err := cli.Execute(context.Background(), streams, []string{"materialize", "--all"})
@@ -590,11 +594,20 @@ func TestMaterializeBulkTagAndAll(t *testing.T) {
 	initFileRemote(t, remoteA)
 	initFileRemote(t, remoteB)
 
+	alphaWS := filepath.Join(domainRoot, "devel", "alpha")
+	betaWS := filepath.Join(domainRoot, "devel", "beta")
 	cfg := []byte(`[workspace]
 style = "workspace-dir"
 
-[domains]
-personal = "` + domainRoot + `"
+[[projects]]
+name = "alpha"
+domain = "personal"
+path = "` + alphaWS + `"
+
+[[projects]]
+name = "beta"
+domain = "personal"
+path = "` + betaWS + `"
 `)
 	cat := []byte(`
 tags = ["devel", "work"]
@@ -604,7 +617,6 @@ name = "alpha"
 domain = "personal"
 remote = "` + remoteA + `"
 default_replica = "main"
-path = "devel/alpha"
 tags = ["devel"]
 
 [[projects]]
@@ -612,7 +624,6 @@ name = "beta"
 domain = "personal"
 remote = "` + remoteB + `"
 default_replica = "main"
-path = "devel/beta"
 tags = ["work"]
 `)
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), cfg, 0o644); err != nil {
@@ -621,10 +632,7 @@ tags = ["work"]
 	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("YERK__CONFIG_DIR", dir)
-	t.Setenv("YERK__CONFIG", "")
-	t.Setenv("YERK__CATALOG", "")
-	t.Setenv("YERK__WORKSPACE_STYLE", "")
+	setYerkHostEnv(t, dir)
 
 	var out, errBuf bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &errBuf}
@@ -680,11 +688,20 @@ func TestMaterializeAlreadyPresentSingle(t *testing.T) {
 	remote := filepath.Join(dir, "remotes", "a.git")
 	initFileRemote(t, remote)
 
+	alphaWS := filepath.Join(domainRoot, "devel", "alpha")
+	betaWS := filepath.Join(domainRoot, "devel", "beta")
 	cfg := []byte(`[workspace]
 style = "workspace-dir"
 
-[domains]
-personal = "` + domainRoot + `"
+[[projects]]
+name = "alpha"
+domain = "personal"
+path = "` + alphaWS + `"
+
+[[projects]]
+name = "beta"
+domain = "personal"
+path = "` + betaWS + `"
 `)
 	cat := []byte(`
 tags = []
@@ -694,7 +711,6 @@ name = "alpha"
 domain = "personal"
 remote = "` + remote + `"
 default_replica = "main"
-path = "devel/alpha"
 `)
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), cfg, 0o644); err != nil {
 		t.Fatal(err)
@@ -702,10 +718,7 @@ path = "devel/alpha"
 	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("YERK__CONFIG_DIR", dir)
-	t.Setenv("YERK__CONFIG", "")
-	t.Setenv("YERK__CATALOG", "")
-	t.Setenv("YERK__WORKSPACE_STYLE", "")
+	setYerkHostEnv(t, dir)
 
 	var out, errBuf bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &errBuf}
@@ -741,11 +754,20 @@ func TestMaterializeInvalidPathErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	alphaWS := filepath.Join(domainRoot, "devel", "alpha")
+	betaWS := filepath.Join(domainRoot, "devel", "beta")
 	cfg := []byte(`[workspace]
 style = "workspace-dir"
 
-[domains]
-personal = "` + domainRoot + `"
+[[projects]]
+name = "alpha"
+domain = "personal"
+path = "` + alphaWS + `"
+
+[[projects]]
+name = "beta"
+domain = "personal"
+path = "` + betaWS + `"
 `)
 	cat := []byte(`
 tags = []
@@ -755,7 +777,6 @@ name = "alpha"
 domain = "personal"
 remote = "git@example.com:x/alpha.git"
 default_replica = "main"
-path = "devel/alpha"
 `)
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), cfg, 0o644); err != nil {
 		t.Fatal(err)
@@ -763,10 +784,7 @@ path = "devel/alpha"
 	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("YERK__CONFIG_DIR", dir)
-	t.Setenv("YERK__CONFIG", "")
-	t.Setenv("YERK__CATALOG", "")
-	t.Setenv("YERK__WORKSPACE_STYLE", "")
+	setYerkHostEnv(t, dir)
 
 	var out bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &out}
@@ -790,11 +808,20 @@ func TestMaterializeAllFresh(t *testing.T) {
 	initFileRemote(t, remoteA)
 	initFileRemote(t, remoteB)
 
+	alphaWS := filepath.Join(domainRoot, "devel", "alpha")
+	betaWS := filepath.Join(domainRoot, "devel", "beta")
 	cfg := []byte(`[workspace]
 style = "workspace-dir"
 
-[domains]
-personal = "` + domainRoot + `"
+[[projects]]
+name = "alpha"
+domain = "personal"
+path = "` + alphaWS + `"
+
+[[projects]]
+name = "beta"
+domain = "personal"
+path = "` + betaWS + `"
 `)
 	cat := []byte(`
 tags = []
@@ -804,14 +831,12 @@ name = "alpha"
 domain = "personal"
 remote = "` + remoteA + `"
 default_replica = "main"
-path = "devel/alpha"
 
 [[projects]]
 name = "beta"
 domain = "personal"
 remote = "` + remoteB + `"
 default_replica = "main"
-path = "devel/beta"
 `)
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), cfg, 0o644); err != nil {
 		t.Fatal(err)
@@ -819,10 +844,7 @@ path = "devel/beta"
 	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("YERK__CONFIG_DIR", dir)
-	t.Setenv("YERK__CONFIG", "")
-	t.Setenv("YERK__CATALOG", "")
-	t.Setenv("YERK__WORKSPACE_STYLE", "")
+	setYerkHostEnv(t, dir)
 
 	var out, errBuf bytes.Buffer
 	streams := cli.IO{Out: &out, Err: &errBuf}

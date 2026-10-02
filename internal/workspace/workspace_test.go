@@ -10,15 +10,30 @@ import (
 	"github.com/salotz/yerk/internal/workspace"
 )
 
-func TestWorkspaceDirStyleAbsolute(t *testing.T) {
+func hostCfg(style string, rows ...config.HostProject) config.Config {
+	return config.Config{
+		Workspace: config.Workspace{Style: style},
+		Projects:  rows,
+	}
+}
+
+func hostCfgDomains(style string, domains map[string]string, rows ...config.HostProject) config.Config {
+	return config.Config{
+		Workspace: config.Workspace{Style: style},
+		Domains:   domains,
+		Projects:  rows,
+	}
+}
+
+func TestWorkspaceDirStyle(t *testing.T) {
 	t.Parallel()
-	layout, err := workspace.NewLayout(config.Config{
-		Workspace: config.Workspace{Style: workspace.StyleWorkspaceDir},
-	})
+	layout, err := workspace.NewLayout(hostCfg(workspace.StyleWorkspaceDir,
+		config.HostProject{Name: "yerk", Domain: "personal", Path: "/tree/personal/devel/yerk"},
+	))
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := config.Project{Name: "yerk", Path: "/tree/personal/devel/yerk"}
+	p := config.Project{Name: "yerk", Domain: "personal"}
 
 	proj, err := layout.ProjectDir(p)
 	if err != nil {
@@ -44,17 +59,52 @@ func TestWorkspaceDirStyleAbsolute(t *testing.T) {
 	}
 }
 
-func TestWorkspaceDirStyleRelativeDomain(t *testing.T) {
+func TestProjectDirStyle(t *testing.T) {
 	t.Parallel()
-	layout, err := workspace.NewLayout(config.Config{
-		Workspace: config.Workspace{Style: workspace.StyleWorkspaceDir},
-		Domains:   map[string]string{"personal": "/tree/personal"},
-	})
+	layout, err := workspace.NewLayout(hostCfg(workspace.StyleProjectDir,
+		config.HostProject{Name: "yerk", Domain: "personal", Path: "/tree/personal/devel/yerk"},
+	))
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := config.Project{Name: "yerk", Domain: "personal", Path: "devel/yerk"}
+	p := config.Project{Name: "yerk", Domain: "personal"}
+	got, err := layout.ReplicaDir(p, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "/tree/personal/devel/yerk__main" {
+		t.Fatalf("got %q", got)
+	}
+	proj, err := layout.ProjectDir(p)
+	if err != nil || proj != "/tree/personal/devel/yerk" {
+		t.Fatalf("project dir %q %v", proj, err)
+	}
+}
 
+func TestReplicaDirMissingPlacement(t *testing.T) {
+	t.Parallel()
+	layout, err := workspace.NewLayout(config.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = layout.ReplicaDir(config.Project{Name: "yerk", Domain: "personal"}, "main")
+	if err == nil {
+		t.Fatal("expected error without domains or host path")
+	}
+	if !strings.Contains(err.Error(), "[domains.personal]") {
+		t.Fatalf("err: %v", err)
+	}
+}
+
+func TestReplicaDirDomainDefault(t *testing.T) {
+	t.Parallel()
+	layout, err := workspace.NewLayout(hostCfgDomains(workspace.StyleWorkspaceDir,
+		map[string]string{"personal": "/tree/personal/devel"},
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := config.Project{Name: "yerk", Domain: "personal"}
 	proj, err := layout.ProjectDir(p)
 	if err != nil {
 		t.Fatal(err)
@@ -71,74 +121,47 @@ func TestWorkspaceDirStyleRelativeDomain(t *testing.T) {
 	}
 }
 
-func TestProjectDirStyle(t *testing.T) {
+func TestReplicaDirRelativeHostPathNeedsDomain(t *testing.T) {
 	t.Parallel()
-	layout, err := workspace.NewLayout(config.Config{
-		Workspace: config.Workspace{Style: workspace.StyleProjectDir},
-		Domains:   map[string]string{"personal": "/tree/personal"},
-	})
+	layout, err := workspace.NewLayout(hostCfg(workspace.StyleWorkspaceDir,
+		config.HostProject{Name: "x", Domain: "personal", Path: "devel/x"},
+	))
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := config.Project{Name: "yerk", Domain: "personal", Path: "devel/yerk"}
-	got, err := layout.ReplicaDir(p, "main")
+	_, err = layout.ReplicaDir(config.Project{Name: "x", Domain: "personal"}, "main")
+	if err == nil {
+		t.Fatal("expected relative path error without domain root")
+	}
+	if !strings.Contains(err.Error(), "relative") {
+		t.Fatalf("err: %v", err)
+	}
+
+	layout, err = workspace.NewLayout(hostCfgDomains(workspace.StyleWorkspaceDir,
+		map[string]string{"personal": "/tree/personal"},
+		config.HostProject{Name: "x", Domain: "personal", Path: "devel/x"},
+	))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "/tree/personal/devel/yerk__main" {
+	got, err := layout.ProjectDir(config.Project{Name: "x", Domain: "personal"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "/tree/personal/devel/x" {
 		t.Fatalf("got %q", got)
-	}
-	proj, err := layout.ProjectDir(p)
-	if err != nil || proj != "/tree/personal/devel/yerk" {
-		t.Fatalf("project dir %q %v", proj, err)
-	}
-}
-
-func TestReplicaDirMissingPath(t *testing.T) {
-	t.Parallel()
-	layout, err := workspace.NewLayout(config.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = layout.ReplicaDir(config.Project{Name: "yerk"}, "main")
-	if err == nil {
-		t.Fatal("expected error without path")
-	}
-	if !strings.Contains(err.Error(), "no path") {
-		t.Fatalf("err: %v", err)
-	}
-}
-
-func TestReplicaDirRelativeNeedsDomainRoot(t *testing.T) {
-	t.Parallel()
-	layout, err := workspace.NewLayout(config.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = layout.ReplicaDir(config.Project{Name: "x", Domain: "personal", Path: "devel/x"}, "main")
-	if err == nil {
-		t.Fatal("expected missing domain root error")
-	}
-	if !strings.Contains(err.Error(), "no root") {
-		t.Fatalf("err: %v", err)
-	}
-
-	_, err = layout.ReplicaDir(config.Project{Name: "x", Path: "devel/x"}, "main")
-	if err == nil {
-		t.Fatal("expected empty domain error")
-	}
-	if !strings.Contains(err.Error(), "domain is empty") {
-		t.Fatalf("err: %v", err)
 	}
 }
 
 func TestReplicaDirEmptyReplica(t *testing.T) {
 	t.Parallel()
-	layout, err := workspace.NewLayout(config.Config{})
+	layout, err := workspace.NewLayout(hostCfg("",
+		config.HostProject{Name: "x", Domain: "personal", Path: "/abs/x"},
+	))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = layout.ReplicaDir(config.Project{Name: "x", Path: "/abs/x"}, "")
+	_, err = layout.ReplicaDir(config.Project{Name: "x", Domain: "personal"}, "")
 	if err == nil {
 		t.Fatal("expected empty replica error")
 	}
@@ -192,19 +215,18 @@ func TestEnsureReplicaDir(t *testing.T) {
 	}
 }
 
-func TestExpandTildeInDomainRoot(t *testing.T) {
+func TestExpandTildeInHostPath(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatal(err)
 	}
-	layout, err := workspace.NewLayout(config.Config{
-		Workspace: config.Workspace{Style: workspace.StyleWorkspaceDir},
-		Domains:   map[string]string{"personal": "~/tree/personal"},
-	})
+	layout, err := workspace.NewLayout(hostCfg(workspace.StyleWorkspaceDir,
+		config.HostProject{Name: "yerk", Domain: "personal", Path: "~/tree/personal/devel/yerk"},
+	))
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := config.Project{Name: "yerk", Domain: "personal", Path: "devel/yerk"}
+	p := config.Project{Name: "yerk", Domain: "personal"}
 	got, err := layout.ProjectDir(p)
 	if err != nil {
 		t.Fatal(err)

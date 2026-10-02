@@ -63,7 +63,7 @@ Bulk selection by tag uses the closed vocabulary:
 
 - No separate `yerk tags` command or mutation UX (hand-edit catalog).
 - No implied hierarchy, colors, or tag metadata beyond the name string.
-- Domains stay in tool `config.toml` `[domains]`; tags stay in the catalog.
+- Optional domain roots stay in tool `config.toml` `[domains]` (ADR 014); tags stay in the catalog.
 
 ## Consequences
 

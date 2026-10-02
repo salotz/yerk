@@ -44,7 +44,7 @@ Statuses: `open` | `proposed` | `locked`.
 | Q26 | locked | JSON key stability promise for agents (v0) |
 | Q27 | locked | XDG split for config vs state |
 | Q28 | locked | Parallel probes remain deferred |
-| Q29 | locked | Path is host-local (config/style dirs), not domain-root join; ADR 008 successor |
+| Q29 | locked | Path is host-local; optional `[domains]` default `<root>/<name>`; full `[[projects]]` path when needed (ADR 014) |
 | Q30 | locked | Catalog identity: `name` + required `domain` → id `domain/name` |
 | Q31 | locked | Merge into Q12: command name `yerk materialize` |
 | Q32 | locked | Inline table only for parameterized `workspace_style` (no named derivations) |
@@ -760,7 +760,15 @@ from domain identity.
 Operator 2026-09-30: “I restated how to handle paths … in the last edits”
 → Q4 (no domain→directory) + Q9 `config.toml` inline dirs. Agent locked Q29
 from that synthesis. **Promote to ADR** replacing/soft-deprecating ADR 008 path
-join. Confirm in chat if any bullet is wrong.
+join.
+
+**Operator correction 2026-10-01:** most projects should **not** need a host
+path row. Restore optional **`[domains]`** as a host convenience default:
+workspace = `<domains[domain]>/<name>` when no `[[projects]]` path is set.
+Full absolute/`~/` path (or relative under the root) only for exceptions.
+Catalog still has **no** `path`. ADR 014 documents this hybrid; bullets 2/5/6
+above are softened accordingly (domain root is optional default base, not
+identity and not catalog join).
 
 ---
 

@@ -13,6 +13,7 @@ func TestToolNamesComplete(t *testing.T) {
 		"YERK__CONFIG_DIR",
 		"YERK__CONFIG",
 		"YERK__CATALOG",
+		"YERK__STATE_DIR",
 		"YERK__WORKSPACE_STYLE",
 	}
 	got := envvars.NamesTool()

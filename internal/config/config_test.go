@@ -41,7 +41,12 @@ func TestLoadSplitFiles(t *testing.T) {
 style = "project-dir"
 
 [domains]
-personal = "/tree/personal"
+personal = "/tree/personal/devel"
+
+[[projects]]
+name = "odd"
+domain = "personal"
+path = "/elsewhere/odd"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +57,6 @@ tags = ["devel"]
 name = "yerk"
 domain = "personal"
 remote = "git@example.com:salotz/yerk.git"
-path = "devel/yerk"
 tags = ["devel"]
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -70,8 +74,11 @@ tags = ["devel"]
 	if cfg.Workspace.Style != "project-dir" {
 		t.Fatalf("config: %+v", cfg.Workspace)
 	}
-	if cfg.Domains["personal"] != "/tree/personal" {
+	if cfg.Domains["personal"] != "/tree/personal/devel" {
 		t.Fatalf("domains: %+v", cfg.Domains)
+	}
+	if len(cfg.Projects) != 1 || cfg.Projects[0].Name != "odd" {
+		t.Fatalf("host projects: %+v", cfg.Projects)
 	}
 
 	cat, err := config.LoadCatalog()
@@ -82,30 +89,92 @@ tags = ["devel"]
 		t.Fatalf("catalog: %+v", cat.Projects)
 	}
 	p, ok := cat.Find("yerk")
-	if !ok || p.Domain != "personal" || p.Path != "devel/yerk" {
+	if !ok || p.Domain != "personal" {
 		t.Fatalf("find: %+v ok=%v", p, ok)
 	}
 }
 
-func TestDomainRootExpand(t *testing.T) {
+func TestProjectWorkspacePath(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Default: domain root + name (no host row).
+	cfg := config.Config{
+		Domains: map[string]string{"personal": "~/tree/personal/devel"},
+	}
+	got, err := cfg.ProjectWorkspacePath("personal", "yerk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(home, "tree/personal/devel/yerk")
+	if got != want {
+		t.Fatalf("default join: got %q want %q", got, want)
+	}
+
+	// Absolute host path override (no domain root needed).
+	cfg = config.Config{Projects: []config.HostProject{{
+		Name: "yerk", Domain: "personal", Path: "~/tree/odd/yerk",
+	}}}
+	got, err = cfg.ProjectWorkspacePath("personal", "yerk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = filepath.Join(home, "tree/odd/yerk")
+	if got != want {
+		t.Fatalf("abs override: got %q want %q", got, want)
+	}
+
+	// Relative host path under domain root.
+	cfg = config.Config{
+		Domains: map[string]string{"personal": "/tree/personal"},
+		Projects: []config.HostProject{{
+			Name: "yerk", Domain: "personal", Path: "devel/yerk",
+		}},
+	}
+	got, err = cfg.ProjectWorkspacePath("personal", "yerk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "/tree/personal/devel/yerk" {
+		t.Fatalf("relative join: got %q", got)
+	}
+
+	// Missing everything.
+	_, err = (config.Config{}).ProjectWorkspacePath("personal", "missing")
+	if err == nil || !strings.Contains(err.Error(), "[domains.personal]") {
+		t.Fatalf("missing: %v", err)
+	}
+
+	// Relative without domain root.
+	_, err = (config.Config{Projects: []config.HostProject{{
+		Name: "x", Domain: "personal", Path: "relative/x",
+	}}}).ProjectWorkspacePath("personal", "x")
+	if err == nil || !strings.Contains(err.Error(), "relative") {
+		t.Fatalf("relative no root: %v", err)
+	}
+}
+
+func TestDomainRoot(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatal(err)
 	}
 	cfg := config.Config{Domains: map[string]string{
-		"personal": "~/tree/personal",
+		"personal": "~/tree/personal/devel",
 	}}
 	root, ok, err := cfg.DomainRoot("personal")
 	if err != nil || !ok {
 		t.Fatalf("DomainRoot: %v ok=%v", err, ok)
 	}
-	want := filepath.Join(home, "tree/personal")
+	want := filepath.Join(home, "tree/personal/devel")
 	if root != want {
 		t.Fatalf("got %q want %q", root, want)
 	}
 	_, ok, err = cfg.DomainRoot("missing")
 	if err != nil || ok {
-		t.Fatalf("missing domain: ok=%v err=%v", ok, err)
+		t.Fatalf("missing: err=%v ok=%v", err, ok)
 	}
 }
 
@@ -256,7 +325,6 @@ func TestLoadCatalogRejectsUndeclaredTag(t *testing.T) {
 name = "yerk"
 domain = "personal"
 remote = "git@example.com:salotz/yerk.git"
-path = "/tmp/yerk"
 tags = ["devel"]
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -268,6 +336,29 @@ tags = ["devel"]
 		t.Fatal("expected load error for undeclared tag")
 	}
 	if !strings.Contains(err.Error(), "not declared") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestLoadCatalogRejectsLegacyPath(t *testing.T) {
+	dir := t.TempDir()
+	catPath := filepath.Join(dir, "catalog.toml")
+	if err := os.WriteFile(catPath, []byte(`
+[[projects]]
+name = "yerk"
+domain = "personal"
+remote = "git@example.com:salotz/yerk.git"
+path = "~/tree/personal/devel/yerk"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("YERK__CONFIG_DIR", dir)
+	t.Setenv("YERK__CATALOG", "")
+	_, err := config.LoadCatalog()
+	if err == nil {
+		t.Fatal("expected load error for legacy path")
+	}
+	if !strings.Contains(err.Error(), "catalog path is not supported") {
 		t.Fatalf("got %v", err)
 	}
 }

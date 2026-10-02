@@ -74,7 +74,7 @@ seeded from portable examples (ADR 007 — do **not** commit host-private trees)
 mkdir -p /tmp/yerk-dev
 cp examples/config.toml /tmp/yerk-dev/config.toml
 cp examples/catalog.toml /tmp/yerk-dev/catalog.toml
-# edit [domains] roots; keep catalog path relative (e.g. devel/example)
+# edit [domains] roots (default <root>/<name>); catalog has no path (ADR 014)
 
 export YERK__CONFIG_DIR=/tmp/yerk-dev
 .local/bin/yerk status

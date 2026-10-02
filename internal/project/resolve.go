@@ -4,6 +4,7 @@ package project
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -11,17 +12,24 @@ import (
 	"github.com/salotz/yerk/internal/config"
 	"github.com/salotz/yerk/internal/gitcmd"
 	"github.com/salotz/yerk/internal/id"
+	"github.com/salotz/yerk/internal/placement"
 	"github.com/salotz/yerk/internal/presence"
+	"github.com/salotz/yerk/internal/state"
 	"github.com/salotz/yerk/internal/workspace"
 )
 
 // FallbackReplica is used when catalog and remote default branch are unavailable.
 const FallbackReplica = "main"
 
-// Resolver resolves paths and default replica names.
+// Resolver resolves paths and default replica names using effective placement.
 type Resolver struct {
-	Layout workspace.Layout
+	Cfg    config.Config
+	Layout workspace.Layout // host-default layout; per-project layout via layoutFor
 	Git    gitcmd.Runner
+	// Warn is where placement / deprecation warnings go (default stderr).
+	Warn io.Writer
+	// CLIStyle is optional explicit --workspace-style for mutate commands.
+	CLIStyle string
 }
 
 // NewResolver builds a resolver from tool config.
@@ -33,7 +41,45 @@ func NewResolver(cfg config.Config, git gitcmd.Runner) (Resolver, error) {
 	if git == nil {
 		git = gitcmd.New()
 	}
-	return Resolver{Layout: layout, Git: git}, nil
+	return Resolver{Cfg: cfg, Layout: layout, Git: git, Warn: os.Stderr}, nil
+}
+
+func (r Resolver) warnf(format string, args ...any) {
+	w := r.Warn
+	if w == nil {
+		w = os.Stderr
+	}
+	fmt.Fprintf(w, format, args...)
+}
+
+// layoutFor returns a Layout using effective placement for project p.
+func (r Resolver) layoutFor(p config.Project) (workspace.Layout, placement.Effective, error) {
+	in := placement.Input{
+		Host:     r.Cfg,
+		Project:  p,
+		CLIStyle: r.CLIStyle,
+	}
+	// Anchor dir-local walk at the project workspace when path math allows
+	// (host style does not affect workspace root for shipped styles).
+	boot, err := workspace.NewLayoutStyle(r.Layout.Style, r.Cfg, r.warnf)
+	if err != nil {
+		return workspace.Layout{}, placement.Effective{}, err
+	}
+	if ws, err := boot.ProjectDir(p); err == nil {
+		in.Anchor = ws
+	}
+	eff, err := placement.Resolve(in)
+	if err != nil {
+		return workspace.Layout{}, placement.Effective{}, err
+	}
+	for _, w := range eff.Warnings {
+		r.warnf("warning: %s\n", w)
+	}
+	layout, err := workspace.NewLayoutStyle(eff.Style, r.Cfg, r.warnf)
+	if err != nil {
+		return workspace.Layout{}, placement.Effective{}, err
+	}
+	return layout, eff, nil
 }
 
 // DefaultReplicaName chooses the replica distinguisher for a project.
@@ -54,12 +100,51 @@ func (r Resolver) DefaultReplicaName(ctx context.Context, p config.Project, netw
 
 // WorkspacePath returns the absolute project workspace directory (owns replicas).
 func (r Resolver) WorkspacePath(p config.Project) (string, error) {
-	return r.Layout.ProjectDir(p)
+	layout, _, err := r.layoutFor(p)
+	if err != nil {
+		return "", err
+	}
+	return layout.ProjectDir(p)
 }
 
 // ReplicaPath returns the on-disk path for project + replica distinguisher.
 func (r Resolver) ReplicaPath(p config.Project, replica string) (string, error) {
-	return r.Layout.ReplicaDir(p, replica)
+	layout, _, err := r.layoutFor(p)
+	if err != nil {
+		return "", err
+	}
+	return layout.ReplicaDir(p, replica)
+}
+
+// EffectivePlacement returns the merged placement for reporting/tests.
+func (r Resolver) EffectivePlacement(p config.Project) (placement.Effective, error) {
+	_, eff, err := r.layoutFor(p)
+	return eff, err
+}
+
+// BindOnInit writes host project state on first ensure/materialize (ADR 013).
+// No-op if already bound. Uses ambient init style (state skipped while computing).
+func (r Resolver) BindOnInit(p config.Project) error {
+	in := placement.Input{
+		Host:     r.Cfg,
+		Project:  p,
+		CLIStyle: r.CLIStyle,
+	}
+	if ws, err := r.WorkspacePath(p); err == nil {
+		in.Anchor = ws
+	}
+	style, err := placement.InitStyle(in)
+	if err != nil {
+		return err
+	}
+	written, err := state.BindStyle(p.Domain, p.Name, style)
+	if err != nil {
+		return err
+	}
+	if written {
+		r.warnf("bound %s workspace style %q -> state\n", p.ID(), style)
+	}
+	return nil
 }
 
 // StatusOptions controls status collection.

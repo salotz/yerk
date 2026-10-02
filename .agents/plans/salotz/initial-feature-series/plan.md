@@ -404,12 +404,17 @@ only when operator reprioritizes.
 
 ## Immediate next step
 
-**Done this chunk:** Phase 0 tracking files; Phase 1 (ADR 012, `internal/id`,
-catalog resolve, api `uri`, CLI id forms); Phase 5 rename `clone` →
-`materialize` (no alias).
+**Done this chunk:** Phase 2 closed — ADR 013/014 (optional `[domains]` default
+`<root>/<name>`; full host path only for exceptions), `internal/state` +
+`internal/placement`, layout/resolver + ensure/materialize bind, env/docs/
+examples/dogfood, stale-ref + `*~` cleanup.
 
-On “go” / execute next step, prefer:
+**Next (default on go):** **Phase 3** — project/replica `get` + path `lookup`
+(and/or universal `get`). Payloads should use effective paths from ADR 014 +
+placement from ADR 013.
 
-1. **Phase 2 ADR draft** — placement layers + path model (supersedes ADR 008 join), or  
-2. **Phase 5 remainder** — `replica create` + worktree method ADR/impl, or  
-3. **Phase 8 slice** — `workspace ensure --tag` / `--output json` (unblocks agents early).
+Alternates if operator widens scope:
+
+1. Phase 5 remainder — `replica create` + worktree method  
+2. Phase 4 — `yerk config resolve`  
+3. Phase 8 slice — `workspace ensure --tag` / `--output json`

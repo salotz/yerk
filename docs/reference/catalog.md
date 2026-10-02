@@ -2,56 +2,63 @@
 
 Status: **stub**
 
-## File
+## Layout
 
-`catalog.toml` under the yerk config directory (or `YERK__CATALOG`).
+| Item | Notes |
+| --- | --- |
+| File | `$XDG_CONFIG_HOME/yerk/catalog.toml` (or `YERK__CATALOG`) |
+| Role | Portable **registry** of projects on this host’s mental model |
+| Not owned here | Host workspace paths (see [configuration](./configuration.md), ADR 014) |
 
-Missing file ⇒ empty catalog (not an error).
-
-## Top-level fields
-
-| Field | Required | Meaning |
-| --- | --- | --- |
-| `tags` | no (empty ok) | Closed vocabulary of labels. Every project tag must be a member ([ADR 010](../../design/decisions/010-catalog-tag-vocabulary.md)). |
-| `[[projects]]` | — | Project rows (see below). |
-
-Duplicate or blank names in `tags` are errors. Load validates the whole file.
-
-## `[[projects]]` fields (MVP)
+## Root fields
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `name` | yes | Catalog key / short identity |
-| `remote` | yes | Clone URI (git URL or path) |
-| `path` | yes (near-term) | **Project workspace** (owns replicas). Prefer **relative** to `[domains.<domain>]`. Absolute allowed. Not a checkout. |
-| `domain` | yes if path relative | Namespace + key into config `[domains]` |
-| `tags` | no | Subset of the catalog root `tags` list (bulk select) |
-| `default_replica` | no | Distinguisher override; else remote HEAD / `main` |
+| `tags` | no | Closed vocabulary; project `tags` must be members (ADR 010) |
 
-Resolve workspace, then style:
+## `[[projects]]` fields
 
-- relative `path` → `<domains[domain]>/<path>`
-- `workspace-dir` → default replica at `<workspace>/<default_replica>`
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `name` | yes | Short name; bare id `domain/name` |
+| `domain` | yes | Logical namespace (ids/URIs; ADR 012). Optional host `[domains]` root uses the same string |
+| `remote` | yes* | Clone URI (*required for materialize) |
+| `tags` | no | Subset of root `tags` |
+| `default_replica` | no | Default distinguisher when ops omit one |
+| `workspace_style` | no | Ambient per-project style override |
+| `replica_method` | no | Later: replica create method |
 
-Example: domain root `~/tree/personal`, path `devel/yerk`, replica `main` →
-`~/tree/personal/devel/yerk/main`.
+**No `path` field.** Host workspace paths come from `config.toml`:
 
-## Example shape
+- optional `[domains.<domain>]` → default `<root>/<name>`
+- optional `[[projects]]` host row for overrides
+
+A legacy catalog `path` key is a **load error**.
 
 ```toml
-tags = ["devel", "work"]
+tags = ["devel"]
 
 [[projects]]
-name = "yerk"
+name = "example"
 domain = "personal"
-remote = "git@github.com:salotz/yerk.git"
-path = "devel/yerk"
+remote = "git@github.com:example/example.git"
 tags = ["devel"]
-default_replica = "main"
+# default_replica = "main"
+# workspace_style = "workspace-dir"
+```
+
+Host counterpart (paths stay out of the catalog):
+
+```toml
+# config.toml
+[domains]
+personal = "~/tree/personal/devel"
+# personal/example → ~/tree/personal/devel/example
 ```
 
 ## See also
 
-- [How to add a project](../how-to/add-a-project.md)
 - [Configuration reference](./configuration.md)
-- [ADR 004](../../design/decisions/004-config-and-catalog-split.md), [ADR 008](../../design/decisions/008-domain-roots-and-relative-catalog-paths.md), [ADR 010](../../design/decisions/010-catalog-tag-vocabulary.md)
+- [ADR 010](../../design/decisions/010-catalog-tag-vocabulary.md),
+  [ADR 012](../../design/decisions/012-identifiers-and-yerk-uri.md),
+  [ADR 014](../../design/decisions/014-host-local-path-model.md)

@@ -45,7 +45,7 @@ groups = ["config", "primary"]
 
 [env.vars.YERK__CONFIG]
 description = "Absolute path to the tool config file (config.toml)."
-long_description = "Tool/host behavior only: [workspace].style and [domains] roots for catalog-relative project paths (ADR 008). Not the project catalog."
+long_description = "Tool/host behavior only: [workspace].style, optional [domains] roots, and optional [[projects]] host rows (ADR 014). Not the project catalog."
 type = "string"
 policy = "warn"
 default = { resolution = "Uses ${YERK__CONFIG_DIR}/config.toml when YERK__CONFIG_DIR is set; otherwise ${XDG_CONFIG_HOME}/yerk/config.toml (or ~/.config/yerk/config.toml)." }
@@ -53,19 +53,32 @@ groups = ["config", "primary"]
 
 [env.vars.YERK__CATALOG]
 description = "Absolute path to the project catalog file (catalog.toml)."
-long_description = "Project registry only ([[projects]]). Prefer path relative to [domains.<domain>] so the catalog stays host-portable. Missing file means empty catalog, not an error."
+long_description = "Project registry only (catalog [[projects]]: identity, remote, tags). No host workspace path field (ADR 014). Missing file means empty catalog, not an error."
 type = "string"
 policy = "warn"
 default = { resolution = "Uses ${YERK__CONFIG_DIR}/catalog.toml when YERK__CONFIG_DIR is set; otherwise ${XDG_CONFIG_HOME}/yerk/catalog.toml (or ~/.config/yerk/catalog.toml)." }
 groups = ["config", "primary"]
 
+[env.vars.YERK__STATE_DIR]
+description = "Directory for tool-written project bindings (state.json trees)."
+long_description = """
+Host project state root (ADR 013). Default layout:
+projects/<domain>/<project>/state.json under this directory.
+Does not replace config.toml or catalog.toml.
+"""
+type = "string"
+policy = "warn"
+default = { resolution = "Uses ${XDG_STATE_HOME}/yerk when XDG_STATE_HOME is set; otherwise ~/.local/state/yerk." }
+groups = ["state", "primary"]
+
 [env.vars.YERK__WORKSPACE_STYLE]
 description = "Override [workspace].style for replica path layout."
 long_description = """
-How replicas sit under each project's resolved workspace directory.
+Ambient overlay for workspace style (ADR 013).
 workspace-dir: <workspace>/<replica> (e.g. …/yerk/main).
 project-dir: <dir(workspace)>/<name>__<replica> (e.g. …/yerk__main).
-Workspace path = domain root + relative catalog path (or absolute path).
+Conflicts with bound host project state warn; state wins.
+Workspace path is catalog absolute or ~/ path (ADR 014).
 """
 type = "enum"
 policy = "warn"
@@ -82,6 +95,14 @@ type = "string"
 policy = "warn"
 default = { resolution = "Platform / XDG Base Directory default when unset (commonly ~/.config)." }
 groups = ["platform", "config"]
+
+[env.vars.XDG_STATE_HOME]
+description = "XDG base directory for user state; yerk appends /yerk when YERK__STATE_DIR is unset."
+external = true
+type = "string"
+policy = "warn"
+default = { resolution = "Platform default when unset (commonly ~/.local/state)." }
+groups = ["platform", "state"]
 
 [env.vars.HOME]
 description = "User home; used by Go user config dir resolution when XDG_CONFIG_HOME is unset."

@@ -19,8 +19,8 @@ repo checkout. PRJX already defines project-local and domain-local config;
   - `YERK__CONFIG_DIR` — alternate config directory
   - `YERK__WORKSPACE_STYLE` — optional style overlay (`workspace-dir` |
     `project-dir`); applied under each resolved project workspace path
-  - Domain roots live in `config.toml` `[domains]` (host-absolute; see
-    [ADR 008](./008-domain-roots-and-relative-catalog-paths.md)); not a single
+  - Optional domain roots live in `config.toml` `[domains]` (host-absolute; see
+    [ADR 014](./014-host-local-path-model.md)); not a single
     shared `[workspace].root`
 - Missing config file is valid (empty catalog + defaults)
 - PRJX discovery stays on PRJX terms (`.prjx-root`, `PRJX__…`)

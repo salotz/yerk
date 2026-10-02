@@ -2,7 +2,12 @@
 
 ## Status
 
-Accepted (2026-09-28)
+**Superseded for path resolution** by [ADR 014](./014-host-local-path-model.md)
+(2026-10-01). Domain remains an id namespace (ADR 012). ADR 014 keeps optional
+`[domains]` as a **host default** (`<root>/<name>`), but catalog no longer
+carries `path`; overrides live on host `[[projects]]`.
+
+Accepted (2026-09-28) for the original domain-root model.
 
 ## Context
 

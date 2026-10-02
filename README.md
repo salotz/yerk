@@ -46,7 +46,7 @@ mise run build
 mkdir -p /tmp/yerk-dev
 cp examples/config.toml /tmp/yerk-dev/config.toml
 cp examples/catalog.toml /tmp/yerk-dev/catalog.toml
-# edit [domains] roots in config.toml; keep catalog path relative (e.g. devel/example)
+# edit [domains] roots in config.toml (default <root>/<name>); catalog has no path (ADR 014)
 
 export YERK__CONFIG_DIR=/tmp/yerk-dev
 .local/bin/yerk catalog show
@@ -59,7 +59,7 @@ Or install into real XDG:
 mkdir -p ~/.config/yerk
 cp examples/config.toml ~/.config/yerk/config.toml
 cp examples/catalog.toml ~/.config/yerk/catalog.toml
-# edit [domains] for this host; catalog path relative to domain (ADR 008)
+# edit [domains] for this host; optional [[projects]] path only for exceptions (ADR 014)
 yerk status
 ```
 
@@ -72,8 +72,8 @@ Samples are files under `examples/` only (no `config example` / `catalog example
 | Item | Value |
 | --- | --- |
 | Config dir | `$XDG_CONFIG_HOME/yerk` (default `~/.config/yerk`) |
-| Tool config | `config.toml` — workspace style + `[domains]` host roots (ADR 008) |
-| Catalog | `catalog.toml` — `[[projects]]` (prefer path relative to domain) |
+| Tool config | `config.toml` — style, optional `[domains]`, optional host `[[projects]]` (ADR 014) |
+| Catalog | `catalog.toml` — portable `[[projects]]` registry (no host paths) |
 | Application info | [`.appinfo/meta.toml`](./.appinfo/meta.toml) — products + env registry (RFC 030/031) |
 
 ### Environment variables

@@ -84,13 +84,13 @@ shell activation.
 - **Host-local agent context (RFC 23 / 26):** do not put operator dogfood
   notes in this remote `.agents/`. On this machine the yerk **project
   workspace** is the parent of this replica (`…/yerk/`, checkout `main/`);
-  catalog uses relative `path` under domain root (e.g. `devel/yerk` +
-  `personal` → `…/tree/personal/devel/yerk`). Workspace-local agent context
-  lives in `…/yerk/.agents/` (closer than in-replica remote context).
-  Application dogfood config remains `~/.config/yerk/` and is updated from
-  that workspace-local note when schema/env defaults change—never committed
-  here (ADR 007). Catalog path resolves to the project workspace, not the
-  replica (ADR 008).
+  host placement is optional `[domains]` (default `<root>/<name>`) plus
+  optional `[[projects]]` path overrides (ADR 014); catalog has no path.
+  Workspace-local agent context lives in `…/yerk/.agents/` (closer than
+  in-replica remote context). Application dogfood config remains
+  `~/.config/yerk/` and is updated from that workspace-local note when
+  schema/env defaults change—never committed here (ADR 007). Project
+  workspace is the parent of the replica leaf (e.g. `…/yerk` vs `…/yerk/main`).
 - Design spine: `design/domain-and-near-term.md`.
 - Design source note (operator org):
   `notes/todo/ideas/20260925T115055--software-project-management-tool__dev_software_todo.org`

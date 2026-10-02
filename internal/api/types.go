@@ -25,8 +25,8 @@ const (
 	PresenceInvalid Presence = "invalid"
 )
 
-// Project is a catalog registry resource: identity and desired placement.
-// Path is the catalog value (relative or absolute), not necessarily resolved.
+// Project is a catalog registry resource: identity and VCS metadata.
+// Host workspace paths live in tool config [[projects]] (ADR 014), not here.
 type Project struct {
 	// APIVersion is the resource API version (yerk/v1).
 	APIVersion string `json:"apiVersion"`
@@ -40,8 +40,6 @@ type Project struct {
 	Domain string `json:"domain,omitempty"`
 	// Remote is the primary git remote URI (or path).
 	Remote string `json:"remote,omitempty"`
-	// Path is the catalog project-workspace path (relative or absolute).
-	Path string `json:"path,omitempty"`
 	// DefaultReplica overrides remote HEAD when set (main replica).
 	DefaultReplica string `json:"defaultReplica,omitempty"`
 	// Tags are bulk-select labels (members of Catalog.Tags).

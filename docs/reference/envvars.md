@@ -29,14 +29,16 @@ Value types and policies: [RFC 032](https://github.com/salotz/rfcs/tree/master/r
 | `YERK__CONFIG_DIR` | string | warn | `${XDG_CONFIG_HOME}/yerk` (else `~/.config/yerk`) | Directory containing `config.toml` and `catalog.toml` by default |
 | `YERK__CONFIG` | string | warn | `${YERK__CONFIG_DIR}/config.toml` | Absolute path to tool config |
 | `YERK__CATALOG` | string | warn | `${YERK__CONFIG_DIR}/catalog.toml` | Absolute path to project catalog |
-| `YERK__WORKSPACE_STYLE` | enum | warn | config style; else `workspace-dir` | `workspace-dir` \| `project-dir` |
+| `YERK__STATE_DIR` | string | warn | `${XDG_STATE_HOME}/yerk` (else `~/.local/state/yerk`) | Project bindings / `state.json` trees (ADR 013) |
+| `YERK__WORKSPACE_STYLE` | enum | warn | config style; else `workspace-dir` | Ambient style overlay; state wins on conflict |
 
 ## Platform (external)
 
 | Name | Type | Policy | Default | Description |
 | --- | --- | --- | --- | --- |
 | `XDG_CONFIG_HOME` | string | warn | platform / XDG default | Base for user config when `YERK__CONFIG_DIR` unset |
-| `HOME` | string | warn | platform home | Fallback for user config dir resolution |
+| `XDG_STATE_HOME` | string | warn | `~/.local/state` | Base for user state when `YERK__STATE_DIR` unset |
+| `HOME` | string | warn | platform home | Fallback for user config/state dir resolution |
 | `PATH` | string | warn | process `PATH` | Must include `git` for materialize / status change probes / ls-remote |
 
 ## PRJX (not in `.appinfo`)

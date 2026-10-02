@@ -25,18 +25,16 @@ type Project struct {
 	// Name is the short project name (within Domain). Full bare id is domain/name.
 	Name string `toml:"name"`
 	// Domain is the required logical namespace for ids/URIs (ADR 012).
-	// Also used today to select a host domain root when Path is relative (ADR 008).
+	// Not a filesystem root (ADR 014).
 	Domain string `toml:"domain"`
 	// Remote is the primary git remote URI (or path). MVP: one remote.
 	Remote string `toml:"remote"`
-	// Path is the project workspace directory (owns replicas).
-	// Prefer a path relative to the domain root (portable catalog), e.g.
-	// "devel/yerk" with domain "personal" → <domains.personal>/devel/yerk.
-	// Absolute paths are allowed as a host-local escape hatch.
-	// Example (workspace-dir): workspace …/devel/yerk → replica main at …/yerk/main.
-	Path string `toml:"path,omitempty"`
 	// DefaultReplica overrides remote HEAD branch short name when set (main replica).
 	DefaultReplica string `toml:"default_replica,omitempty"`
+	// WorkspaceStyle is an optional per-project ambient style override (ADR 013).
+	WorkspaceStyle string `toml:"workspace_style,omitempty"`
+	// ReplicaMethod is optional (worktree|clone); consumed by replica create later.
+	ReplicaMethod string `toml:"replica_method,omitempty"`
 	// Tags group projects for bulk operations. Each entry must appear in
 	// Catalog.Tags (closed vocabulary).
 	Tags []string `toml:"tags,omitempty"`
@@ -59,6 +57,8 @@ func EmptyCatalog() Catalog {
 
 // LoadCatalog reads catalog.toml if present, else returns an empty catalog.
 // Non-empty catalogs are validated (declared tags; project tags ⊆ declared).
+// Legacy project `path` fields are rejected (host paths belong in config.toml
+// [[projects]] — ADR 014).
 func LoadCatalog() (Catalog, error) {
 	path, err := CatalogPath()
 	if err != nil {
@@ -73,6 +73,10 @@ func LoadCatalog() (Catalog, error) {
 		return EmptyCatalog(), fmt.Errorf("read catalog %s: %w", path, err)
 	}
 
+	if err := rejectLegacyProjectPaths(data); err != nil {
+		return EmptyCatalog(), fmt.Errorf("catalog %s: %w", path, err)
+	}
+
 	var cat Catalog
 	if err := toml.Unmarshal(data, &cat); err != nil {
 		return EmptyCatalog(), fmt.Errorf("parse catalog %s: %w", path, err)
@@ -81,6 +85,33 @@ func LoadCatalog() (Catalog, error) {
 		return EmptyCatalog(), fmt.Errorf("catalog %s: %w", path, err)
 	}
 	return cat, nil
+}
+
+// rejectLegacyProjectPaths fails if any catalog [[projects]] row still sets path=
+// (host workspace location moved to config.toml [[projects]], ADR 014).
+func rejectLegacyProjectPaths(data []byte) error {
+	var raw struct {
+		Projects []map[string]any `toml:"projects"`
+	}
+	if err := toml.Unmarshal(data, &raw); err != nil {
+		return nil // parse errors handled by main unmarshal
+	}
+	for i, row := range raw.Projects {
+		if _, ok := row["path"]; !ok {
+			continue
+		}
+		name, _ := row["name"].(string)
+		domain, _ := row["domain"].(string)
+		label := strings.TrimSpace(name)
+		if d := strings.TrimSpace(domain); d != "" && label != "" {
+			label = d + "/" + label
+		}
+		if label == "" {
+			label = fmt.Sprintf("projects[%d]", i)
+		}
+		return fmt.Errorf("project %q: catalog path is not supported (ADR 014); set config.toml [domains] and/or [[projects]] path, then remove path from the catalog row", label)
+	}
+	return nil
 }
 
 // Validate checks identity fields, closed tag vocabulary, and project rows.

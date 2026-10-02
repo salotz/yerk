@@ -40,8 +40,8 @@ Future workspace-only operations go under `yerk workspace …`.
 
 ### Ensure creates the workspace only
 
-- Resolve catalog path → absolute **project workspace** (domain root +
-  relative path, or absolute escape hatch; ADR 008).
+- Resolve host placement → absolute **project workspace** (optional domain
+  root + name, or host `[[projects]]` path; ADR 014).
 - `mkdir -p` that directory.
 - **Do not** create the replica distinguisher leaf (`…/main`).
 - **Do not** run git, resolve default branch, or take `--network`.
@@ -68,5 +68,6 @@ Replica checkout paths are created by `yerk materialize` (parents via
 ## Related
 
 - [domain-and-near-term.md](../domain-and-near-term.md) — verbs table
-- [008](./008-domain-roots-and-relative-catalog-paths.md) — workspace path math
-- [004](./004-config-and-catalog-split.md) — catalog path = project workspace
+- [014](./014-host-local-path-model.md) — workspace path math
+- [004](./004-config-and-catalog-split.md) — config vs catalog split
+- [013](./013-placement-policy-and-host-state.md) — style bind on ensure
