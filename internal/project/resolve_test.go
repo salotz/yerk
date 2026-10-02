@@ -251,6 +251,18 @@ func TestProjectStatus(t *testing.T) {
 	if st.DefaultReplica.Change != "clean no-upstream" {
 		t.Fatalf("change: %q", st.DefaultReplica.Change)
 	}
+	if st.Overall == nil || st.Overall.Presence != "all-present" {
+		t.Fatalf("overall: %+v", st.Overall)
+	}
+	if st.Overall.Change != "clean" && st.Overall.Change != "no-upstream" && st.Overall.Change != "clean no-upstream" {
+		// rollup drops lone clean when other tokens exist; no-upstream alone is fine
+		if st.Overall.Change != "no-upstream" {
+			t.Fatalf("overall change: %q", st.Overall.Change)
+		}
+	}
+	if len(st.Replicas) != 1 || st.Replicas[0].Replica != "main" {
+		t.Fatalf("replicas: %+v", st.Replicas)
+	}
 
 	list, err := r.ProjectStatuses(context.Background(), []config.Project{p}, project.StatusOptions{})
 	if err != nil {
@@ -258,6 +270,51 @@ func TestProjectStatus(t *testing.T) {
 	}
 	if len(list) != 1 || list[0].DefaultReplica.Change != "-" {
 		t.Fatalf("presence-only list: %+v", list)
+	}
+}
+
+func TestProjectStatusMultipleReplicas(t *testing.T) {
+	isolateState(t)
+	root := t.TempDir()
+	ws := filepath.Join(root, "devel", "yerk")
+	mainP := filepath.Join(ws, "main")
+	featP := filepath.Join(ws, "feat")
+	for _, d := range []string{mainP, featP} {
+		if err := os.MkdirAll(filepath.Join(d, ".git"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Non-git sibling should be ignored.
+	if err := os.MkdirAll(filepath.Join(ws, "notes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Config{
+		Workspace: config.Workspace{Style: "workspace-dir"},
+		Projects:  hostProjects(root, "personal/yerk", "devel/yerk"),
+	}
+	r, err := project.NewResolver(cfg, fakeGit{
+		probe: gitcmd.ProbeResult{Dirty: true, Branch: "x", NoUpstream: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := config.Project{Name: "yerk", Domain: "personal", Remote: "x", DefaultReplica: "main"}
+	st, err := r.ProjectStatus(context.Background(), p, project.StatusOptions{Git: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Replicas) != 2 {
+		t.Fatalf("want 2 replicas, got %+v", st.Replicas)
+	}
+	if st.Overall == nil || st.Overall.Presence != "all-present" || st.Overall.PresentCount != 2 {
+		t.Fatalf("overall %+v", st.Overall)
+	}
+	// Dirty should surface in overall; clean should not dominate.
+	if !strings.Contains(st.Overall.Change, "dirty") {
+		t.Fatalf("overall change should surface dirty: %q", st.Overall.Change)
+	}
+	if strings.Contains(st.Overall.Change, "clean") {
+		t.Fatalf("overall should not keep clean when dirty: %q", st.Overall.Change)
 	}
 }
 

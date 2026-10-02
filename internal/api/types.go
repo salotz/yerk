@@ -211,9 +211,24 @@ type ConfigResolve struct {
 	Contributions []ConfigResolveContribution `json:"contributions"`
 }
 
-// ProjectStatus is a project-scoped status view (workspace + optional replica summary).
-// Default list UX (P6) should emphasize WorkspacePath; ReplicaStatus owns
-// full replica-scoped detail.
+// ProjectOverall is a rollup of replica presence/change for one project.
+// Emphasizes divergence: clean only when every present replica is clean and
+// none are missing/invalid relative to the collected set.
+type ProjectOverall struct {
+	// Presence summarizes replica roots: all-present | partial | missing | invalid | none.
+	Presence string `json:"presence"`
+	// Change is a bag of flags across present replicas (or "-" when not probed).
+	// Prefers surfacing dirty/untracked/ahead/behind/error over a lone clean.
+	Change string `json:"change,omitempty"`
+	// ReplicaCount is how many replica rows were collected.
+	ReplicaCount int `json:"replicaCount"`
+	// PresentCount is how many of those are presence=present.
+	PresentCount int `json:"presentCount"`
+}
+
+// ProjectStatus is a project-scoped status view (workspace + replicas + overall).
+// Multi-project list UX emphasizes WorkspacePath and Overall; single-project
+// detail also lists Replicas. ReplicaStatus remains the one-replica resource.
 type ProjectStatus struct {
 	// APIVersion is the resource API version (yerk/v1).
 	APIVersion string `json:"apiVersion"`
@@ -230,8 +245,12 @@ type ProjectStatus struct {
 	// WorkspacePresence is optional presence of the workspace directory itself
 	// (not a git checkout classifier). Empty when not evaluated.
 	WorkspacePresence Presence `json:"workspacePresence,omitempty"`
-	// DefaultReplica summarizes the default replica when collected.
+	// DefaultReplica summarizes the default/main replica (always included when known).
 	DefaultReplica *ReplicaSummary `json:"defaultReplica,omitempty"`
+	// Replicas lists live on-disk replicas plus default when missing (probed).
+	Replicas []ReplicaStatus `json:"replicas,omitempty"`
+	// Overall rolls up presence/change across Replicas.
+	Overall *ProjectOverall `json:"overall,omitempty"`
 	// Tags echoes catalog tags.
 	Tags []string `json:"tags,omitempty"`
 	// Remote echoes the catalog remote URI.

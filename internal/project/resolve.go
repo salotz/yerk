@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/salotz/yerk/internal/api"
@@ -363,16 +364,57 @@ func (r Resolver) ReplicaStatus(ctx context.Context, p config.Project, replica s
 	return r.replicaStatus(ctx, p, replica, opts)
 }
 
-// ProjectStatus builds a ProjectStatus with workspace path and default-replica summary.
+// ProjectStatus builds a ProjectStatus with workspace path, live replicas,
+// default-replica summary, and an overall rollup (presence + change).
 func (r Resolver) ProjectStatus(ctx context.Context, p config.Project, opts StatusOptions) (api.ProjectStatus, error) {
 	ws, err := r.WorkspacePath(p)
 	if err != nil {
 		return api.ProjectStatus{}, fmt.Errorf("%s: %w", p.Name, err)
 	}
-	rep, err := r.replicaStatus(ctx, p, "", opts)
+	layout, _, err := r.layoutFor(p)
 	if err != nil {
-		return api.ProjectStatus{}, err
+		return api.ProjectStatus{}, fmt.Errorf("%s: %w", p.Name, err)
 	}
+
+	defaultName, err := r.DefaultReplicaName(ctx, p, opts.Network)
+	if err != nil {
+		return api.ProjectStatus{}, fmt.Errorf("%s: %w", p.Name, err)
+	}
+
+	live, err := layout.ListLiveReplicas(p)
+	if err != nil {
+		return api.ProjectStatus{}, fmt.Errorf("%s: %w", p.Name, err)
+	}
+
+	// Collect unique replica names: all live + default (even if missing).
+	seen := make(map[string]struct{}, len(live)+1)
+	var names []string
+	add := func(n string) {
+		n = strings.TrimSpace(n)
+		if n == "" {
+			return
+		}
+		if _, ok := seen[n]; ok {
+			return
+		}
+		seen[n] = struct{}{}
+		names = append(names, n)
+	}
+	for _, n := range live {
+		add(n)
+	}
+	add(defaultName)
+	sort.Strings(names)
+
+	replicas := make([]api.ReplicaStatus, 0, len(names))
+	for _, name := range names {
+		row, err := r.replicaStatus(ctx, p, name, opts)
+		if err != nil {
+			return api.ProjectStatus{}, err
+		}
+		replicas = append(replicas, row)
+	}
+
 	out := api.NewProjectStatus()
 	out.URI = id.ProjectURI(p.Domain, p.Name)
 	out.Name = p.Name
@@ -381,9 +423,126 @@ func (r Resolver) ProjectStatus(ctx context.Context, p config.Project, opts Stat
 	out.WorkspacePresence = classifyWorkspaceDir(ws)
 	out.Tags = append([]string(nil), p.Tags...)
 	out.Remote = p.Remote
-	sum := rep.Summary()
-	out.DefaultReplica = &sum
+	out.Replicas = replicas
+	overall := rollupProjectOverall(replicas, opts.Git)
+	out.Overall = &overall
+
+	// DefaultReplica summary: prefer the matching row; else synthesize empty.
+	for i := range replicas {
+		if replicas[i].Replica == defaultName {
+			sum := replicas[i].Summary()
+			out.DefaultReplica = &sum
+			break
+		}
+	}
+	if out.DefaultReplica == nil {
+		// Should not happen (default always added), but keep shape stable.
+		rep, err := r.replicaStatus(ctx, p, defaultName, opts)
+		if err == nil {
+			sum := rep.Summary()
+			out.DefaultReplica = &sum
+		}
+	}
 	return out, nil
+}
+
+// rollupProjectOverall merges replica rows into one presence + change bag.
+// Presence prefers invalid > partial/missing mix > all present > none.
+// Change prefers problem flags (dirty, untracked, ahead, behind, error, …)
+// and only reports clean when every present replica is clean and git was on.
+func rollupProjectOverall(replicas []api.ReplicaStatus, withGit bool) api.ProjectOverall {
+	out := api.ProjectOverall{ReplicaCount: len(replicas)}
+	if len(replicas) == 0 {
+		out.Presence = "none"
+		out.Change = "-"
+		return out
+	}
+
+	var present, missing, invalid int
+	for _, r := range replicas {
+		switch r.Presence {
+		case api.PresencePresent:
+			present++
+		case api.PresenceInvalid:
+			invalid++
+		default:
+			missing++
+		}
+	}
+	out.PresentCount = present
+
+	switch {
+	case invalid > 0 && present == 0 && missing == 0:
+		out.Presence = "invalid"
+	case invalid > 0:
+		out.Presence = "invalid"
+	case present == len(replicas):
+		out.Presence = "all-present"
+	case present == 0:
+		out.Presence = "missing"
+	default:
+		out.Presence = "partial"
+	}
+
+	if !withGit {
+		out.Change = "-"
+		return out
+	}
+	if present == 0 {
+		out.Change = "-"
+		return out
+	}
+
+	// Union change tokens from present replicas; drop bare clean until end.
+	tokenSet := make(map[string]struct{})
+	var order []string
+	addTok := func(t string) {
+		t = strings.TrimSpace(t)
+		if t == "" || t == "-" {
+			return
+		}
+		if _, ok := tokenSet[t]; ok {
+			return
+		}
+		tokenSet[t] = struct{}{}
+		order = append(order, t)
+	}
+	allClean := true
+	for _, r := range replicas {
+		if r.Presence != api.PresencePresent {
+			continue
+		}
+		ch := strings.TrimSpace(r.Change)
+		if ch == "" || ch == "-" {
+			allClean = false
+			continue
+		}
+		parts := strings.Fields(ch)
+		hasClean := false
+		hasProblem := false
+		for _, p := range parts {
+			if p == "clean" {
+				hasClean = true
+				continue
+			}
+			hasProblem = true
+			addTok(p)
+		}
+		if hasProblem || !hasClean {
+			allClean = false
+		}
+	}
+	if len(order) == 0 {
+		if allClean {
+			out.Change = "clean"
+		} else {
+			out.Change = "-"
+		}
+		return out
+	}
+	// Prefer problem tokens only (no trailing clean when mixed).
+	out.Change = strings.Join(order, " ")
+	return out
 }
 
 func (r Resolver) replicaStatus(ctx context.Context, p config.Project, replica string, opts StatusOptions) (api.ReplicaStatus, error) {

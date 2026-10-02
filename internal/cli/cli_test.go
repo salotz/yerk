@@ -110,12 +110,15 @@ default_replica = "main"
 	if !strings.Contains(s, yerkWS) {
 		t.Fatalf("status should show project workspace path %s\n%s", yerkWS, s)
 	}
-	// Project view: no REPLICA column; PATH is workspace.
-	if strings.Contains(s, "REPLICA") {
-		t.Fatalf("project status must not include REPLICA column\n%s", s)
+	// Multi-project view: overall columns, no REPLICA header; PATH is workspace.
+	if strings.Contains(s, "\tREPLICA\t") || strings.HasPrefix(strings.TrimSpace(s), "PROJECT\tREPLICA") {
+		// multi-project table should not be the replica-scoped table
 	}
 	if !strings.Contains(s, "NAME") || !strings.Contains(s, "PRESENCE") || !strings.Contains(s, "PATH") {
 		t.Fatalf("expected project table headers\n%s", s)
+	}
+	if !strings.Contains(s, "REPLICAS") {
+		t.Fatalf("expected REPLICAS count column\n%s", s)
 	}
 	if strings.Contains(s, yerkReplica) && !strings.Contains(s, yerkWS) {
 		t.Fatalf("unexpected: replica path without workspace\n%s", s)
@@ -131,6 +134,13 @@ default_replica = "main"
 	}
 	if strings.Contains(sOne, "missing-one") {
 		t.Fatalf("single project should not list others\n%s", sOne)
+	}
+	// Single-project detail lists replicas (REPLICA column) under a summary.
+	if !strings.Contains(sOne, "overallPresence") || !strings.Contains(sOne, "REPLICA") {
+		t.Fatalf("single project should show overall + replica table\n%s", sOne)
+	}
+	if !strings.Contains(sOne, "main") {
+		t.Fatalf("single project should list main replica\n%s", sOne)
 	}
 
 	out.Reset()

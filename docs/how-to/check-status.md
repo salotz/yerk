@@ -15,26 +15,32 @@ presence scan.
 
 ## Steps
 
-1. **All projects** (project-scoped table):
+1. **All projects** (project-scoped table with **overall** rollup):
 
    ```sh
    yerk status
    ```
 
-   Columns: name, domain, default-replica **presence**, **change**, and
-   **project workspace** path (not the replica checkout path). No REPLICA
-   column on this view.
+   Columns: name, domain, **overall presence**, **overall change**, replica
+   **count**, and **project workspace** path. Overall looks across every
+   **live** replica under the workspace (plus default/main even if missing).
+   Change prefers divergence (dirty, untracked, ahead/behind, …) over clean.
 
-2. **One project:**
+2. **One project** — summary + **all replicas**:
 
    ```sh
    yerk status yerk
+   yerk status personal/yerk
    ```
 
-3. **One replica** (replica-scoped table: path, presence, change, branch):
+   Prints overall presence/change, then a replica table (each live checkout
+   probed separately). Session worktrees from `replica create` show up here.
+
+3. **One replica** (replica-scoped table only):
 
    ```sh
    yerk status yerk main
+   yerk status personal/yerk/feat
    ```
 
 4. **Select by tag:**
@@ -55,16 +61,16 @@ presence scan.
    ```
 
 6. Read **presence** vs **change** without conflating them: change is only
-   meaningful when presence is `present`.
+   meaningful when presence is `present` (or overall has present replicas).
 
 7. Read change flags as a **bag**, not a single enum. Common patterns:
 
    | CHANGE | Rough meaning |
    | --- | --- |
    | `clean` | Worktree clean; if tracking and equal, no sync token |
-   | `clean ahead:2` | Clean worktree; **2 commits not on upstream** (unpushed vs tracking) |
-   | `clean no-upstream` | Clean worktree; **no branch upstream configured** (not proof that a remote has your commits) |
+   | `clean ahead:2` | Clean worktree; **2 commits not on upstream** |
    | `dirty untracked` | Local modifications + untracked files |
+   | overall `dirty ahead:1` | At least one replica dirty and/or ahead (clean dropped) |
 
    Full flag dictionary and gita comparison:
    [Status model (explanation)](../explanation/status-model.md).
@@ -73,3 +79,4 @@ presence scan.
 
 - [Status model (explanation)](../explanation/status-model.md)
 - [Commands reference](../reference/commands.md)
+- [Create a session replica](./create-a-replica.md)

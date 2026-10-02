@@ -18,7 +18,7 @@ a second full flag dump.
 
 | Command | Role | Notes |
 | --- | --- | --- |
-| `status` | Project or replica presence + change | `status [project-id [replica]]`; id forms; `--tag`; change on by default; `--presence-only`; `--network` |
+| `status` | Project or replica presence + change | multi-project: overall rollup; one project: all live replicas; one replica: single row; `--tag`; `--presence-only`; `--network` |
 | `path` / `resolve` | Print workspace path, or replica path when distinguisher given | `path <id>` → workspace; `path <id> <replica>` or `id/replica` → checkout |
 | `workspace ensure` | Create project workspace dirs only | project ids required, or `--all`; no replica leaf; no git |
 | `materialize` | Materialize replica(s) from remote via git | `materialize <id> [replica]` \| `--all` \| `--tag`; optional `--replica`; already-present → ok; no `clone` alias |

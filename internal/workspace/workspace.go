@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/salotz/yerk/internal/config"
@@ -120,6 +121,107 @@ func (l Layout) ReplicaDir(p config.Project, replica string) (string, error) {
 
 func (l Layout) projectWorkspace(p config.Project) (string, error) {
 	return l.Host.ProjectWorkspacePath(p.Domain, p.Name)
+}
+
+// ListLiveReplicas returns distinguisher names for on-disk checkouts that look
+// like usable git repos under this project's layout (presence=present).
+// Missing default/main is not invented here — callers may add it.
+// Names are sorted lexicographically.
+func (l Layout) ListLiveReplicas(p config.Project) ([]string, error) {
+	switch l.Style {
+	case StyleWorkspaceDir:
+		return l.listLiveWorkspaceDir(p)
+	case StyleProjectDir:
+		return l.listLiveProjectDir(p)
+	default:
+		return nil, fmt.Errorf("unknown workspace style %q", l.Style)
+	}
+}
+
+func (l Layout) listLiveWorkspaceDir(p config.Project) ([]string, error) {
+	ws, err := l.projectWorkspace(p)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(ws)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("list workspace %s: %w", ws, err)
+	}
+	var names []string
+	for _, e := range entries {
+		name := e.Name()
+		if name == "" || name == "." || name == ".." || strings.HasPrefix(name, ".") {
+			continue
+		}
+		if strings.ContainsAny(name, `/\`) {
+			continue
+		}
+		// Follow dir entries; also accept anything Classify can see (symlink checkout).
+		path := filepath.Join(ws, name)
+		if !isLiveCheckout(path) {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+func (l Layout) listLiveProjectDir(p config.Project) ([]string, error) {
+	ws, err := l.projectWorkspace(p)
+	if err != nil {
+		return nil, err
+	}
+	name := strings.TrimSpace(p.Name)
+	if name == "" {
+		return nil, fmt.Errorf("project has empty name (needed for %s layout)", StyleProjectDir)
+	}
+	prefix := name + "__"
+	parent := filepath.Dir(ws)
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("list project-dir parent %s: %w", parent, err)
+	}
+	var names []string
+	for _, e := range entries {
+		ent := e.Name()
+		if !strings.HasPrefix(ent, prefix) {
+			continue
+		}
+		rep := strings.TrimPrefix(ent, prefix)
+		if rep == "" || strings.ContainsAny(rep, `/\`) {
+			continue
+		}
+		path := filepath.Join(parent, ent)
+		if !isLiveCheckout(path) {
+			continue
+		}
+		names = append(names, rep)
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+func isLiveCheckout(path string) bool {
+	// Inline presence check without importing presence (avoid cycle).
+	// Match presence.Present: .git file or directory.
+	fi, err := os.Stat(path)
+	if err != nil || !fi.IsDir() {
+		return false
+	}
+	gitPath := filepath.Join(path, ".git")
+	gfi, err := os.Lstat(gitPath)
+	if err != nil {
+		return false
+	}
+	// Directory or gitfile (worktree) both OK.
+	return gfi.IsDir() || gfi.Mode().IsRegular()
 }
 
 // EnsureDir creates dir (mkdir -p). Never deletes.

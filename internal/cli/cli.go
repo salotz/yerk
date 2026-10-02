@@ -217,7 +217,11 @@ will apply to other bulk ops (workspace ensure, materialize, …).`, "status"),
 				if err != nil {
 					return err
 				}
-				return printProjectStatusTable(streams.Out, rows, withGit)
+				if len(rows) == 0 {
+					return fmt.Errorf("status: no project status rows")
+				}
+				// Single-project: summary + per-replica table.
+				return printProjectStatusDetail(streams.Out, rows[0], withGit)
 			}
 
 			// Project list (all or --tag)
@@ -1472,41 +1476,71 @@ func selectProjects(cat config.Catalog, names []string, all bool) ([]config.Proj
 	return out, nil
 }
 
-// printProjectStatusTable writes the human project-scoped status table.
-// PATH is the project workspace; PRESENCE/CHANGE summarize the default replica.
+// printProjectStatusTable writes the multi-project status table.
+// PATH is the project workspace; PRESENCE/CHANGE are overall rollups.
 func printProjectStatusTable(w io.Writer, rows []api.ProjectStatus, withGit bool) error {
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	if withGit {
-		fmt.Fprintf(tw, "NAME\tDOMAIN\tPRESENCE\tCHANGE\tPATH\n")
+		fmt.Fprintf(tw, "NAME\tDOMAIN\tPRESENCE\tCHANGE\tREPLICAS\tPATH\n")
 		for _, row := range rows {
-			pres, change := projectReplicaCols(row)
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
-				row.Name, dash(row.Domain), pres, change, row.WorkspacePath)
+			pres, change, n := projectOverallCols(row)
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%s\n",
+				row.Name, dash(row.Domain), pres, change, n, row.WorkspacePath)
 		}
 	} else {
-		fmt.Fprintf(tw, "NAME\tDOMAIN\tPRESENCE\tPATH\n")
+		fmt.Fprintf(tw, "NAME\tDOMAIN\tPRESENCE\tREPLICAS\tPATH\n")
 		for _, row := range rows {
-			pres, _ := projectReplicaCols(row)
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
-				row.Name, dash(row.Domain), pres, row.WorkspacePath)
+			pres, _, n := projectOverallCols(row)
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\n",
+				row.Name, dash(row.Domain), pres, n, row.WorkspacePath)
 		}
 	}
 	return tw.Flush()
 }
 
-func projectReplicaCols(row api.ProjectStatus) (presence, change string) {
-	if row.DefaultReplica == nil {
-		return "-", "-"
+// printProjectStatusDetail writes one project summary plus its replica table.
+func printProjectStatusDetail(w io.Writer, row api.ProjectStatus, withGit bool) error {
+	pres, change, n := projectOverallCols(row)
+	fmt.Fprintf(w, "project:\t%s\n", row.Name)
+	if row.Domain != "" {
+		fmt.Fprintf(w, "domain:\t%s\n", row.Domain)
 	}
-	pres := string(row.DefaultReplica.Presence)
-	if pres == "" {
-		pres = "-"
+	fmt.Fprintf(w, "workspace:\t%s\n", row.WorkspacePath)
+	fmt.Fprintf(w, "workspacePresence:\t%s\n", dash(string(row.WorkspacePresence)))
+	fmt.Fprintf(w, "overallPresence:\t%s\n", pres)
+	if withGit {
+		fmt.Fprintf(w, "overallChange:\t%s\n", change)
 	}
-	change = row.DefaultReplica.Change
+	fmt.Fprintf(w, "replicas:\t%d\n", n)
+	if row.DefaultReplica != nil {
+		fmt.Fprintf(w, "defaultReplica:\t%s\n", row.DefaultReplica.Name)
+	}
+	fmt.Fprintln(w)
+	if len(row.Replicas) == 0 {
+		fmt.Fprintln(w, "(no replicas collected)")
+		return nil
+	}
+	return printReplicaStatusTable(w, row.Replicas, withGit)
+}
+
+func projectOverallCols(row api.ProjectStatus) (presence, change string, replicaCount int) {
+	if row.Overall != nil {
+		presence = row.Overall.Presence
+		change = row.Overall.Change
+		replicaCount = row.Overall.ReplicaCount
+	} else if row.DefaultReplica != nil {
+		// Backward-compatible fallback.
+		presence = string(row.DefaultReplica.Presence)
+		change = row.DefaultReplica.Change
+		replicaCount = 1
+	}
+	if presence == "" {
+		presence = "-"
+	}
 	if change == "" {
 		change = "-"
 	}
-	return pres, change
+	return presence, change, replicaCount
 }
 
 // printReplicaStatusTable writes a replica-scoped status table.

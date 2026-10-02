@@ -215,6 +215,64 @@ func TestEnsureReplicaDir(t *testing.T) {
 	}
 }
 
+func TestListLiveReplicasWorkspaceDir(t *testing.T) {
+	root := t.TempDir()
+	ws := filepath.Join(root, "yerk")
+	for _, name := range []string{"main", "feat"} {
+		if err := os.MkdirAll(filepath.Join(ws, name, ".git"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(ws, "notes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(ws, "broken"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	layout, err := workspace.NewLayout(hostCfg(workspace.StyleWorkspaceDir,
+		config.HostProject{Name: "yerk", Domain: "personal", Path: ws},
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := layout.ListLiveReplicas(config.Project{Name: "yerk", Domain: "personal"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] != "feat" || got[1] != "main" {
+		t.Fatalf("got %v", got)
+	}
+}
+
+func TestListLiveReplicasProjectDir(t *testing.T) {
+	root := t.TempDir()
+	ws := filepath.Join(root, "yerk") // project workspace path (not a replica)
+	if err := os.MkdirAll(ws, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, leaf := range []string{"yerk__main", "yerk__sess"} {
+		if err := os.MkdirAll(filepath.Join(root, leaf, ".git"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(root, "other__x", ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	layout, err := workspace.NewLayout(hostCfg(workspace.StyleProjectDir,
+		config.HostProject{Name: "yerk", Domain: "personal", Path: ws},
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := layout.ListLiveReplicas(config.Project{Name: "yerk", Domain: "personal"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] != "main" || got[1] != "sess" {
+		t.Fatalf("got %v", got)
+	}
+}
+
 func TestExpandTildeInHostPath(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {

@@ -54,7 +54,7 @@ It speaks PRJX vocabulary; it does not redefine the PRJX spec.
 | Intent | Internal verb | Near-term CLI |
 | --- | --- | --- |
 | Add/update catalog row | register | hand-edit catalog (future `yerk register`) |
-| List / show states | status (read model) | `yerk status [project [replica]]` [`--tag`]; change on by default (`--presence-only` opt-out) |
+| List / show states | status (read model) | `yerk status` multi-project overall; `status <project>` all live replicas; `status <project> <replica>` one row; `--tag`; change on by default (`--presence-only` opt-out) |
 | Path math only | resolve | `yerk path` (alias: `resolve`); bare name → workspace, +replica → checkout |
 | Create project workspace dir | materialize workspace | `yerk workspace ensure <proj>…` or `--all` (later also `--tag`) |
 | Create replica via git | materialize replica | `yerk materialize <id> [replica]` \| `--all` \| `--tag` |

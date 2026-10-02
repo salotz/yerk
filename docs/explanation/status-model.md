@@ -28,6 +28,25 @@ Authority split:
 Do not treat `missing` as “clean”, or `dirty` as “missing”. Change is only
 defined when presence is `present`.
 
+### Views
+
+| Invocation | What you see |
+| --- | --- |
+| `yerk status` | Multi-project table: **overall** presence/change + replica count + workspace path |
+| `yerk status <project>` | Project summary + **every live replica** row (and default/main if missing) |
+| `yerk status <project> <replica>` | One replica row only |
+
+**Live replicas** are discovered on disk under the effective layout
+(`workspace-dir`: children of the project workspace with a usable `.git`;
+`project-dir`: sibling dirs named `<name>__<replica>`). Non-git siblings are
+ignored.
+
+**Overall presence:** `all-present` \| `partial` \| `missing` \| `invalid` \| `none`.
+
+**Overall change:** union of problem tokens across present replicas (dirty,
+untracked, ahead/behind, no-upstream, error, …). A lone `clean` appears only
+when every present replica is clean; mixed clean+dirty drops `clean`.
+
 ---
 
 ## Presence
