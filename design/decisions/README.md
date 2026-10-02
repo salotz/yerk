@@ -24,3 +24,4 @@ Architecture decision records for `yerk`.
 | [018](./018-name-tags-workspace-style.md) | `name-tags` style path math + inline params |
 | [019](./019-output-formats.md) | Shared `--output json\|yaml\|table` |
 | [020](./020-git-adapter-subprocess.md) | Git adapter stays subprocess (not go-git) |
+| [021](./021-mit-license.md) | MIT license |
