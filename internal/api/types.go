@@ -9,6 +9,8 @@ const (
 	KindProject       = "Project"
 	KindProjectStatus = "ProjectStatus"
 	KindReplicaStatus = "ReplicaStatus"
+	KindProjectInfo   = "ProjectInfo"
+	KindReplicaInfo   = "ReplicaInfo"
 )
 
 // Presence is on-disk presence of an expected path (replica checkout or,
@@ -98,6 +100,77 @@ type ReplicaSummary struct {
 	Change string `json:"change,omitempty"`
 	// Branch is the checked-out branch when known.
 	Branch string `json:"branch,omitempty"`
+}
+
+// PlacementInfo is effective placement snapshot embedded on get/lookup (ADR 013/015).
+type PlacementInfo struct {
+	// Style is the effective workspace style name.
+	Style string `json:"style"`
+	// Bound is true when host project state supplied the winning style.
+	Bound bool `json:"bound"`
+	// Sources lists contributing layer labels (best-effort debug).
+	Sources []string `json:"sources,omitempty"`
+	// Warnings are ambient drift messages when bound state wins.
+	Warnings []string `json:"warnings,omitempty"`
+}
+
+// ProjectInfo is a single-project read model for get/lookup (ADR 015).
+// Richer than bare Project: host paths, presence, and effective placement.
+type ProjectInfo struct {
+	// APIVersion is the resource API version (yerk/v1).
+	APIVersion string `json:"apiVersion"`
+	// Kind is always KindProjectInfo.
+	Kind string `json:"kind"`
+	// URI is the canonical project identifier (yerk://domain/name).
+	URI string `json:"uri,omitempty"`
+	// Name is the catalog project name.
+	Name string `json:"name"`
+	// Domain is the project domain namespace (ADR 012).
+	Domain string `json:"domain,omitempty"`
+	// Remote is the primary git remote URI (or path).
+	Remote string `json:"remote,omitempty"`
+	// DefaultReplica is the catalog main-replica override when set.
+	DefaultReplica string `json:"defaultReplica,omitempty"`
+	// Tags echoes catalog tags.
+	Tags []string `json:"tags,omitempty"`
+	// WorkspacePath is the absolute project workspace directory.
+	WorkspacePath string `json:"workspacePath"`
+	// WorkspacePresence is presence of the workspace directory.
+	WorkspacePresence Presence `json:"workspacePresence,omitempty"`
+	// Placement is effective style / binding for this project on this host.
+	Placement *PlacementInfo `json:"placement,omitempty"`
+	// MatchedPath is the absolute path that triggered lookup (lookup only).
+	MatchedPath string `json:"matchedPath,omitempty"`
+}
+
+// ReplicaInfo is a single-replica read model for get/lookup (ADR 015).
+type ReplicaInfo struct {
+	// APIVersion is the resource API version (yerk/v1).
+	APIVersion string `json:"apiVersion"`
+	// Kind is always KindReplicaInfo.
+	Kind string `json:"kind"`
+	// URI is the canonical replica identifier (yerk://domain/project/replica).
+	URI string `json:"uri,omitempty"`
+	// Project is the catalog project name.
+	Project string `json:"project"`
+	// Replica is the replica distinguisher.
+	Replica string `json:"replica"`
+	// Domain is the project domain namespace (ADR 012).
+	Domain string `json:"domain,omitempty"`
+	// Remote echoes the catalog remote URI.
+	Remote string `json:"remote,omitempty"`
+	// Tags echoes catalog tags.
+	Tags []string `json:"tags,omitempty"`
+	// Path is the absolute on-disk checkout path.
+	Path string `json:"path"`
+	// Presence is missing | present | invalid for Path.
+	Presence Presence `json:"presence"`
+	// WorkspacePath is the owning project workspace directory.
+	WorkspacePath string `json:"workspacePath,omitempty"`
+	// Placement is effective style / binding for the project on this host.
+	Placement *PlacementInfo `json:"placement,omitempty"`
+	// MatchedPath is the absolute path that triggered lookup (lookup only).
+	MatchedPath string `json:"matchedPath,omitempty"`
 }
 
 // ProjectStatus is a project-scoped status view (workspace + optional replica summary).

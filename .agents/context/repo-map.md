@@ -20,7 +20,7 @@ FQ name: `salotz.yerk`
 - `internal/cli` — cobra command tree (select + print)
 - `internal/api` — stable resource types (ADR 011)
 - `internal/config` — XDG TOML config + catalog load
-- `internal/project` — resolve / status collectors → api resources
+- `internal/project` — resolve / status / get+lookup → api resources
 - `internal/workspace` — replica path styles
 - `internal/placement` — effective style merge (ADR 013)
 - `internal/state` — host project bindings under XDG state

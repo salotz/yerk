@@ -35,15 +35,15 @@ Do not put operator answers here (use [decisions.md](./decisions.md)).
 - [x] Follow-up: host dogfood `[domains]` + exception-only `[[projects]]`
 - [x] Close-out tidy: stale ADR/docs refs, `*~` backups removed, repo-map packages
 
-## Phase 3 — get + lookup  **← next**
+## Phase 3 — get + lookup
 
-- [ ] ADR/CLI: `get`, `project|replica get`, `lookup` / noun lookup
-- [ ] Payloads: catalog + paths + presence + placement + URI
-- [ ] Reverse lookup: walk-up under workspace/replica
-- [ ] Human default; `--output json` when practical
-- [ ] Tests + agent-oriented docs
+- [x] ADR/CLI: `get`, `project|replica get`, `lookup` / noun lookup (ADR 015)
+- [x] Payloads: catalog + paths + presence + placement + URI (`ProjectInfo` / `ReplicaInfo`)
+- [x] Reverse lookup: walk-up under workspace/replica
+- [x] Human default; `--output json` when practical
+- [x] Tests + agent-oriented docs
 
-## Phase 4 — `config resolve`
+## Phase 4 — `config resolve`  **← next**
 
 - [ ] Command: `yerk config resolve <target>`
 - [ ] Ordered contribution list + effective placement keys

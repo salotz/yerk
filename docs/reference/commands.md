@@ -30,6 +30,7 @@ a second full flag dump.
 ## See also
 
 - [How to check status](../how-to/check-status.md)
+- [How to get project info](../how-to/get-project-info.md)
 - [How to materialize a replica](../how-to/materialize-a-replica.md)
 - [Identifiers](../explanation/identifiers.md)
 - [Catalog reference](./catalog.md)
@@ -38,3 +39,4 @@ a second full flag dump.
 - [ADR 010](../../design/decisions/010-catalog-tag-vocabulary.md)
 - [ADR 011](../../design/decisions/011-api-resources.md)
 - [ADR 012](../../design/decisions/012-identifiers-and-yerk-uri.md)
+- [ADR 015](../../design/decisions/015-get-and-lookup.md)

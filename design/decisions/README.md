@@ -18,3 +18,4 @@ Architecture decision records for `yerk`.
 | [012](./012-identifiers-and-yerk-uri.md) | Identifiers and `yerk://` URI currency |
 | [013](./013-placement-policy-and-host-state.md) | Placement layers and host project state |
 | [014](./014-host-local-path-model.md) | Host-local path model (successor to 008) |
+| [015](./015-get-and-lookup.md) | Project/replica get and path lookup |

@@ -404,17 +404,16 @@ only when operator reprioritizes.
 
 ## Immediate next step
 
-**Done this chunk:** Phase 2 closed — ADR 013/014 (optional `[domains]` default
-`<root>/<name>`; full host path only for exceptions), `internal/state` +
-`internal/placement`, layout/resolver + ensure/materialize bind, env/docs/
-examples/dogfood, stale-ref + `*~` cleanup.
+**Done this chunk:** Phase 3 closed — ADR 015; `api.ProjectInfo` /
+`ReplicaInfo`; `project.ProjectInfo` / `ReplicaInfo` / `LookupPath`; CLI
+`get`, `lookup`, `project|replica get|lookup` with human + `--output json`;
+tests + docs/how-to.
 
-**Next (default on go):** **Phase 3** — project/replica `get` + path `lookup`
-(and/or universal `get`). Payloads should use effective paths from ADR 014 +
-placement from ADR 013.
+**Next (default on go):** **Phase 4** — `yerk config resolve <target>`
+(ordered contribution list + effective placement keys; same merge as ADR 013).
 
 Alternates if operator widens scope:
 
 1. Phase 5 remainder — `replica create` + worktree method  
-2. Phase 4 — `yerk config resolve`  
-3. Phase 8 slice — `workspace ensure --tag` / `--output json`
+2. Phase 8 slice — `workspace ensure --tag` / broader `--output` formats  
+3. Phase 6 — agent `context` dumps (builds on get/lookup)

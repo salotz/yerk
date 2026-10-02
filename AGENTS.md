@@ -61,19 +61,22 @@ shell activation.
 - Do not invent a second product root; code lives at repo root Go layout,
   design/docs beside it.
 - Near-term CLI surface (implemented only; no stub commands): `status`,
-  `path`/`resolve`, `workspace ensure`, `materialize`, `config`, `catalog`,
-  `envvars`, `version`. Project args accept bare id / short unique name /
-  `yerk://…` (ADR 012; package `internal/id`). `domain` is required on every
-  catalog project. `workspace ensure` creates the project workspace
-  directory only (not a replica leaf); requires project ids or `--all`
-  (ADR 009). `materialize` (renamed from `clone`; no alias) supports single
-  project or bulk `--all` / `--tag` (XOR with names). Catalog root
-  `tags = […]` is a closed vocabulary; project `tags` must be members
-  (ADR 010). Catalog edits are hand-edit for now. API resources (ADR 011,
-  `internal/api`) carry canonical `uri`. Status UX: change on by default
-  (`--presence-only`), origin comparison fallback. Further series lives
-  under ephemeral `.agents/plans/<owner>/` (do not cite plan-local Q ids
-  in product code). `pull`/`push` only after sync semantics ADR.
+  `path`/`resolve`, `get`, `lookup`, `project get|lookup`,
+  `replica get|lookup`, `workspace ensure`, `materialize`, `config`,
+  `catalog`, `envvars`, `version`. Project args accept bare id / short
+  unique name / `yerk://…` (ADR 012; package `internal/id`). `domain` is
+  required on every catalog project. `get`/`lookup` return project or
+  replica info (placement + paths + presence); `--output json` (ADR 015).
+  `workspace ensure` creates the project workspace directory only (not a
+  replica leaf); requires project ids or `--all` (ADR 009). `materialize`
+  (renamed from `clone`; no alias) supports single project or bulk
+  `--all` / `--tag` (XOR with names). Catalog root `tags = […]` is a closed
+  vocabulary; project `tags` must be members (ADR 010). Catalog edits are
+  hand-edit for now. API resources (ADR 011, `internal/api`) carry
+  canonical `uri`. Status UX: change on by default (`--presence-only`),
+  origin comparison fallback. Further series lives under ephemeral
+  `.agents/plans/<owner>/` (do not cite plan-local Q ids in product code).
+  `pull`/`push` only after sync semantics ADR.
 - **Examples vs host state (ADR 007):** portable samples live under
   `examples/` (e.g. `examples/config.toml`, `examples/catalog.toml`). Do
   **not** put `*.example.toml` at the repo root. Do **not** commit

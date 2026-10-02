@@ -864,6 +864,112 @@ default_replica = "main"
 	}
 }
 
+func TestGetAndLookup(t *testing.T) {
+	dir := t.TempDir()
+	yerkWS := filepath.Join(dir, "devel", "yerk")
+	yerkReplica := filepath.Join(yerkWS, "main")
+	deep := filepath.Join(yerkReplica, "pkg", "x")
+	if err := os.MkdirAll(filepath.Join(yerkReplica, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(deep, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `[workspace]
+style = "workspace-dir"
+
+[[projects]]
+name = "yerk"
+domain = "personal"
+path = "` + yerkWS + `"
+`
+	cat := `
+tags = ["devel"]
+
+[[projects]]
+name = "yerk"
+domain = "personal"
+remote = "git@example.com:salotz/yerk.git"
+default_replica = "main"
+tags = ["devel"]
+`
+	writeHostConfig(t, dir, cfg, cat)
+	setYerkHostEnv(t, dir)
+
+	var out, errBuf bytes.Buffer
+	streams := cli.IO{Out: &out, Err: &errBuf}
+
+	if err := cli.Execute(context.Background(), streams, []string{"get", "personal/yerk"}); err != nil {
+		t.Fatalf("get project: %v\n%s", err, errBuf.String())
+	}
+	s := out.String()
+	if !strings.Contains(s, "kind:\tProjectInfo") || !strings.Contains(s, "yerk://personal/yerk") {
+		t.Fatalf("get project human:\n%s", s)
+	}
+	if !strings.Contains(s, yerkWS) || !strings.Contains(s, "placement.style:\tworkspace-dir") {
+		t.Fatalf("get project fields:\n%s", s)
+	}
+
+	out.Reset()
+	errBuf.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"get", "yerk/main", "--output", "json"}); err != nil {
+		t.Fatalf("get replica json: %v", err)
+	}
+	js := out.String()
+	if !strings.Contains(js, `"kind": "ReplicaInfo"`) || !strings.Contains(js, `"uri": "yerk://personal/yerk/main"`) {
+		t.Fatalf("json:\n%s", js)
+	}
+	if !strings.Contains(js, yerkReplica) {
+		t.Fatalf("json path:\n%s", js)
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"project", "get", "yerk/main"}); err == nil {
+		t.Fatal("project get with replica should error")
+	}
+
+	out.Reset()
+	errBuf.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"replica", "get", "yerk", "main"}); err != nil {
+		t.Fatalf("replica get: %v", err)
+	}
+	if !strings.Contains(out.String(), "kind:\tReplicaInfo") {
+		t.Fatalf("replica get:\n%s", out.String())
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"lookup", deep}); err != nil {
+		t.Fatalf("lookup: %v", err)
+	}
+	lu := out.String()
+	if !strings.Contains(lu, "kind:\tReplicaInfo") || !strings.Contains(lu, "matchedPath:\t"+deep) {
+		t.Fatalf("lookup deep:\n%s", lu)
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"project", "lookup", deep}); err != nil {
+		t.Fatalf("project lookup: %v", err)
+	}
+	if !strings.Contains(out.String(), "kind:\tProjectInfo") {
+		t.Fatalf("project lookup:\n%s", out.String())
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"replica", "lookup", yerkWS}); err == nil {
+		t.Fatal("replica lookup workspace should error")
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"lookup", filepath.Join(dir, "nope")}); err == nil {
+		t.Fatal("lookup unknown should error")
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"get", "yerk", "--output", "yaml"}); err == nil {
+		t.Fatal("unsupported output should error")
+	}
+}
+
 // initFileRemote creates a non-bare git repo usable as a local file remote.
 func initFileRemote(t *testing.T, dir string) {
 	t.Helper()

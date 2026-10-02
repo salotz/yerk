@@ -67,6 +67,22 @@ func NewProjectStatus() ProjectStatus {
 	}
 }
 
+// NewProjectInfo returns a ProjectInfo with TypeMeta fields set.
+func NewProjectInfo() ProjectInfo {
+	return ProjectInfo{
+		APIVersion: APIVersion,
+		Kind:       KindProjectInfo,
+	}
+}
+
+// NewReplicaInfo returns a ReplicaInfo with TypeMeta fields set.
+func NewReplicaInfo() ReplicaInfo {
+	return ReplicaInfo{
+		APIVersion: APIVersion,
+		Kind:       KindReplicaInfo,
+	}
+}
+
 // Summary returns a compact ReplicaSummary from a full ReplicaStatus.
 func (r ReplicaStatus) Summary() ReplicaSummary {
 	return ReplicaSummary{

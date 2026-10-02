@@ -3,6 +3,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -53,6 +54,10 @@ func NewRoot(streams IO) *cobra.Command {
 	root.AddCommand(newVersionCmd(streams))
 	root.AddCommand(newStatusCmd(streams))
 	root.AddCommand(newPathCmd(streams))
+	root.AddCommand(newGetCmd(streams))
+	root.AddCommand(newLookupCmd(streams))
+	root.AddCommand(newProjectCmd(streams))
+	root.AddCommand(newReplicaCmd(streams))
 	root.AddCommand(newWorkspaceCmd(streams))
 	root.AddCommand(newMaterializeCmd(streams))
 	root.AddCommand(newConfigCmd(streams))
@@ -72,11 +77,14 @@ func Execute(ctx context.Context, streams IO, args []string) error {
 const longHelp = `yerk is a host-level multi-project manager.
 
 It keeps a project catalog, materializes replicas into a workspace layout,
-resolves paths by identifier, and reports presence and change status.
+resolves paths by identifier, reports presence and change status, and
+exposes get/lookup for agents and tools.
 Vocabulary aligns with PRJX (project, replica, workspace).
 
 Project identity (ADR 012): bare domain/name[/replica] or yerk://… URI.
 Short unique names expand; ambiguous short names error.
+
+Read one resource: yerk get <id>, yerk lookup <path> (--output json).
 
 Default files:
   Tool config:  $XDG_CONFIG_HOME/yerk/config.toml
@@ -299,6 +307,359 @@ Default replica is not implied for identity: pass the distinguisher explicitly.`
 		},
 	}
 	return cmd
+}
+
+func newGetCmd(streams IO) *cobra.Command {
+	var output string
+	cmd := &cobra.Command{
+		Use:   "get <id>",
+		Short: "Show project or replica info by identifier",
+		Long: withEnv(`Read one project or replica resource by identifier (ADR 015).
+
+  yerk get <project-id>                 → project info (not default replica)
+  yerk get <project-id>/<replica>       → replica info
+  yerk get yerk://domain/name[/replica]
+
+Id forms: short unique name, domain/name, or yerk://… (ADR 012). A project id
+never auto-expands to the main replica.
+
+Default output is human key/value text. Pass --output json for a single JSON
+document (apiVersion yerk/v1).
+
+See also: yerk project get, yerk replica get, yerk lookup.`, "get"),
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateOutputFlag(output); err != nil {
+				return err
+			}
+			cfg, cat, res, err := loadResolver(streams)
+			if err != nil {
+				return err
+			}
+			_ = cfg
+			p, ref, err := resolveProjectArgs(cat, args)
+			if err != nil {
+				return err
+			}
+			if ref.IsReplica() {
+				info, err := res.ReplicaInfo(p, ref.Replica)
+				if err != nil {
+					return err
+				}
+				return printReplicaInfo(streams.Out, info, output)
+			}
+			info, err := res.ProjectInfo(p)
+			if err != nil {
+				return err
+			}
+			return printProjectInfo(streams.Out, info, output)
+		},
+	}
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json (default: human text)")
+	return cmd
+}
+
+func newLookupCmd(streams IO) *cobra.Command {
+	var output string
+	cmd := &cobra.Command{
+		Use:   "lookup <path>",
+		Short: "Show project or replica info for an on-disk path",
+		Long: withEnv(`Map a filesystem path to a catalog project or replica (ADR 015).
+
+  yerk lookup <path>          → replica info if under a checkout root, else project
+  yerk lookup .               → resolve cwd
+
+Walk-up: any subdirectory under a known workspace or replica root matches.
+Longest matching root wins when multiple projects could apply.
+
+Default output is human key/value text. Pass --output json for JSON.
+
+See also: yerk project lookup, yerk replica lookup, yerk get.`, "lookup"),
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateOutputFlag(output); err != nil {
+				return err
+			}
+			_, cat, res, err := loadResolver(streams)
+			if err != nil {
+				return err
+			}
+			result, err := res.LookupPath(cat.Projects, args[0], project.LookupAny)
+			if err != nil {
+				return err
+			}
+			return printLookupResult(streams.Out, result, output)
+		},
+	}
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json (default: human text)")
+	return cmd
+}
+
+func newProjectCmd(streams IO) *cobra.Command {
+	root := &cobra.Command{
+		Use:   "project",
+		Short: "Project-scoped get and lookup",
+		Long: withEnv(`Project-scoped reads (ADR 015).
+
+  yerk project get <project-id>       → project info
+  yerk project lookup <path>          → project info for a path under its workspace
+
+Universal forms: yerk get, yerk lookup.`, "project"),
+		RunE: requireSubcommand,
+	}
+	root.AddCommand(newProjectGetCmd(streams))
+	root.AddCommand(newProjectLookupCmd(streams))
+	return root
+}
+
+func newProjectGetCmd(streams IO) *cobra.Command {
+	var output string
+	cmd := &cobra.Command{
+		Use:   "get <project-id>",
+		Short: "Show project info by identifier",
+		Long: withEnv(`Read project info by id (no replica segment).
+
+  yerk project get personal/yerk
+  yerk project get yerk://personal/yerk
+
+Rejects replica ids; use yerk replica get or yerk get <id>/<replica>.`, "project get"),
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateOutputFlag(output); err != nil {
+				return err
+			}
+			_, cat, res, err := loadResolver(streams)
+			if err != nil {
+				return err
+			}
+			p, ref, err := resolveProjectArgs(cat, args)
+			if err != nil {
+				return err
+			}
+			if ref.IsReplica() {
+				return fmt.Errorf("project get: %q includes a replica; use yerk replica get or yerk get", args[0])
+			}
+			info, err := res.ProjectInfo(p)
+			if err != nil {
+				return err
+			}
+			return printProjectInfo(streams.Out, info, output)
+		},
+	}
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json (default: human text)")
+	return cmd
+}
+
+func newProjectLookupCmd(streams IO) *cobra.Command {
+	var output string
+	cmd := &cobra.Command{
+		Use:   "lookup <path>",
+		Short: "Show project info for an on-disk path",
+		Long: withEnv(`Map a path under a project workspace to project info (ADR 015).
+
+Paths under a replica still resolve to the owning project.`, "project lookup"),
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateOutputFlag(output); err != nil {
+				return err
+			}
+			_, cat, res, err := loadResolver(streams)
+			if err != nil {
+				return err
+			}
+			result, err := res.LookupPath(cat.Projects, args[0], project.LookupProject)
+			if err != nil {
+				return err
+			}
+			return printLookupResult(streams.Out, result, output)
+		},
+	}
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json (default: human text)")
+	return cmd
+}
+
+func newReplicaCmd(streams IO) *cobra.Command {
+	root := &cobra.Command{
+		Use:   "replica",
+		Short: "Replica-scoped get and lookup",
+		Long: withEnv(`Replica-scoped reads (ADR 015).
+
+  yerk replica get <project-id> <replica>
+  yerk replica get <project-id>/<replica>
+  yerk replica lookup <path>
+
+Universal forms: yerk get, yerk lookup.`, "replica"),
+		RunE: requireSubcommand,
+	}
+	root.AddCommand(newReplicaGetCmd(streams))
+	root.AddCommand(newReplicaLookupCmd(streams))
+	return root
+}
+
+func newReplicaGetCmd(streams IO) *cobra.Command {
+	var output string
+	cmd := &cobra.Command{
+		Use:   "get <project-id> [replica]",
+		Short: "Show replica info by identifier",
+		Long: withEnv(`Read replica info by id.
+
+  yerk replica get personal/yerk main
+  yerk replica get personal/yerk/main
+  yerk replica get yerk://personal/yerk/main
+
+Replica distinguisher is required (no default-replica expansion).`, "replica get"),
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateOutputFlag(output); err != nil {
+				return err
+			}
+			_, cat, res, err := loadResolver(streams)
+			if err != nil {
+				return err
+			}
+			p, ref, err := resolveProjectArgs(cat, args)
+			if err != nil {
+				return err
+			}
+			if !ref.IsReplica() {
+				return errors.New("replica get: replica distinguisher required (id third segment or second argument)")
+			}
+			info, err := res.ReplicaInfo(p, ref.Replica)
+			if err != nil {
+				return err
+			}
+			return printReplicaInfo(streams.Out, info, output)
+		},
+	}
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json (default: human text)")
+	return cmd
+}
+
+func newReplicaLookupCmd(streams IO) *cobra.Command {
+	var output string
+	cmd := &cobra.Command{
+		Use:   "lookup <path>",
+		Short: "Show replica info for an on-disk path",
+		Long: withEnv(`Map a path under a replica checkout to replica info (ADR 015).
+
+Errors if the path is only under a project workspace and not under a replica root.`, "replica lookup"),
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateOutputFlag(output); err != nil {
+				return err
+			}
+			_, cat, res, err := loadResolver(streams)
+			if err != nil {
+				return err
+			}
+			result, err := res.LookupPath(cat.Projects, args[0], project.LookupReplica)
+			if err != nil {
+				return err
+			}
+			return printLookupResult(streams.Out, result, output)
+		},
+	}
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json (default: human text)")
+	return cmd
+}
+
+// loadResolver loads host config + catalog and builds a Resolver (stderr warnings).
+func loadResolver(streams IO) (config.Config, config.Catalog, project.Resolver, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return config.Config{}, config.Catalog{}, project.Resolver{}, err
+	}
+	cat, err := config.LoadCatalog()
+	if err != nil {
+		return config.Config{}, config.Catalog{}, project.Resolver{}, err
+	}
+	res, err := project.NewResolver(cfg, gitcmd.New())
+	if err != nil {
+		return config.Config{}, config.Catalog{}, project.Resolver{}, err
+	}
+	res.Warn = streams.Err
+	return cfg, cat, res, nil
+}
+
+func validateOutputFlag(output string) error {
+	switch strings.TrimSpace(output) {
+	case "", "json":
+		return nil
+	default:
+		return fmt.Errorf("unsupported --output %q (want json or omit for human text)", output)
+	}
+}
+
+func printLookupResult(w io.Writer, result project.LookupResult, output string) error {
+	if result.Replica != nil {
+		return printReplicaInfo(w, *result.Replica, output)
+	}
+	if result.Project != nil {
+		return printProjectInfo(w, *result.Project, output)
+	}
+	return errors.New("lookup: empty result")
+}
+
+func printProjectInfo(w io.Writer, info api.ProjectInfo, output string) error {
+	if strings.TrimSpace(output) == "json" {
+		return writeJSON(w, info)
+	}
+	fmt.Fprintf(w, "kind:\t%s\n", info.Kind)
+	fmt.Fprintf(w, "uri:\t%s\n", dash(info.URI))
+	fmt.Fprintf(w, "name:\t%s\n", info.Name)
+	fmt.Fprintf(w, "domain:\t%s\n", dash(info.Domain))
+	fmt.Fprintf(w, "remote:\t%s\n", dash(info.Remote))
+	fmt.Fprintf(w, "defaultReplica:\t%s\n", dash(info.DefaultReplica))
+	fmt.Fprintf(w, "tags:\t%s\n", dash(strings.Join(info.Tags, ",")))
+	fmt.Fprintf(w, "workspacePath:\t%s\n", info.WorkspacePath)
+	fmt.Fprintf(w, "workspacePresence:\t%s\n", dash(string(info.WorkspacePresence)))
+	if info.Placement != nil {
+		fmt.Fprintf(w, "placement.style:\t%s\n", dash(info.Placement.Style))
+		fmt.Fprintf(w, "placement.bound:\t%t\n", info.Placement.Bound)
+		if len(info.Placement.Warnings) > 0 {
+			fmt.Fprintf(w, "placement.warnings:\t%s\n", strings.Join(info.Placement.Warnings, "; "))
+		}
+	}
+	if info.MatchedPath != "" {
+		fmt.Fprintf(w, "matchedPath:\t%s\n", info.MatchedPath)
+	}
+	return nil
+}
+
+func printReplicaInfo(w io.Writer, info api.ReplicaInfo, output string) error {
+	if strings.TrimSpace(output) == "json" {
+		return writeJSON(w, info)
+	}
+	fmt.Fprintf(w, "kind:\t%s\n", info.Kind)
+	fmt.Fprintf(w, "uri:\t%s\n", dash(info.URI))
+	fmt.Fprintf(w, "project:\t%s\n", info.Project)
+	fmt.Fprintf(w, "replica:\t%s\n", info.Replica)
+	fmt.Fprintf(w, "domain:\t%s\n", dash(info.Domain))
+	fmt.Fprintf(w, "remote:\t%s\n", dash(info.Remote))
+	fmt.Fprintf(w, "tags:\t%s\n", dash(strings.Join(info.Tags, ",")))
+	fmt.Fprintf(w, "path:\t%s\n", info.Path)
+	fmt.Fprintf(w, "presence:\t%s\n", dash(string(info.Presence)))
+	fmt.Fprintf(w, "workspacePath:\t%s\n", dash(info.WorkspacePath))
+	if info.Placement != nil {
+		fmt.Fprintf(w, "placement.style:\t%s\n", dash(info.Placement.Style))
+		fmt.Fprintf(w, "placement.bound:\t%t\n", info.Placement.Bound)
+		if len(info.Placement.Warnings) > 0 {
+			fmt.Fprintf(w, "placement.warnings:\t%s\n", strings.Join(info.Placement.Warnings, "; "))
+		}
+	}
+	if info.MatchedPath != "" {
+		fmt.Fprintf(w, "matchedPath:\t%s\n", info.MatchedPath)
+	}
+	return nil
+}
+
+func writeJSON(w io.Writer, v any) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(v); err != nil {
+		return err
+	}
+	return nil
 }
 
 func newWorkspaceCmd(streams IO) *cobra.Command {
