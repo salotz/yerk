@@ -14,6 +14,52 @@ import (
 	"github.com/salotz/yerk/internal/workspace"
 )
 
+// ConfigResolve builds a placement contribution report for one project (config resolve).
+func (r Resolver) ConfigResolve(p config.Project) (api.ConfigResolve, error) {
+	in := placement.Input{
+		Host:     r.Cfg,
+		Project:  p,
+		CLIStyle: r.CLIStyle,
+	}
+	ws, err := r.WorkspacePath(p)
+	if err != nil {
+		// Still explain with cwd anchor if workspace cannot be resolved.
+		in.Anchor = ""
+	} else {
+		in.Anchor = ws
+	}
+	rep, err := placement.Explain(in)
+	if err != nil {
+		return api.ConfigResolve{}, fmt.Errorf("%s: %w", p.ID(), err)
+	}
+	// Surface placement warnings on stderr like other commands.
+	for _, w := range rep.Effective.Warnings {
+		r.warnf("warning: %s\n", w)
+	}
+	out := api.NewConfigResolve()
+	out.URI = id.ProjectURI(p.Domain, p.Name)
+	out.Target = p.ID()
+	out.Anchor = in.Anchor
+	out.WorkspacePath = ws
+	out.EffectiveStyle = rep.Effective.Style
+	out.Bound = rep.Effective.Bound
+	out.Warnings = append([]string(nil), rep.Effective.Warnings...)
+	out.Files = append([]string(nil), rep.Files...)
+	out.Contributions = make([]api.ConfigResolveContribution, 0, len(rep.Contributions))
+	for _, c := range rep.Contributions {
+		out.Contributions = append(out.Contributions, api.ConfigResolveContribution{
+			Order:   c.Order,
+			Layer:   c.Layer,
+			Path:    c.Path,
+			Key:     c.Key,
+			Value:   c.Value,
+			Applies: c.Applies,
+			Note:    c.Note,
+		})
+	}
+	return out, nil
+}
+
 // ProjectInfo builds a ProjectInfo resource for one catalog project (ADR 015).
 func (r Resolver) ProjectInfo(p config.Project) (api.ProjectInfo, error) {
 	ws, err := r.WorkspacePath(p)

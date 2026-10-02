@@ -60,6 +60,7 @@ It speaks PRJX vocabulary; it does not redefine the PRJX spec.
 | Create replica via git | materialize replica | `yerk materialize <id> [replica]` \| `--all` \| `--tag` |
 | Read git state | probe change status | part of status (opt-out flag); not a separate default verb |
 | Universal read | get / lookup | `yerk get <id>`; `yerk lookup <path>`; `project|replica get|lookup`; `--output json` (ADR 015) |
+| Explain placement | resolve config | `yerk config resolve <project-id>` (contribution stack; ADR 013) |
 | Sync | pull / push | later — **design semantics first** (no stub CLI) |
 | Apply host-local files | stage locals | later |
 

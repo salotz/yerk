@@ -110,9 +110,10 @@ not auto-clone main.
 
 - **Mutate placement:** `materialize`, `workspace ensure`, later `replica create`
   (style and/or method where relevant).
-- **Read-only:** `status`, `path`, later `get` / `lookup` / `config resolve` /
-  `context` — **report** effective policy; do not change binding; no style flags
-  that rebind.
+- **Read-only:** `status`, `path`, `get` / `lookup` / `config resolve` /
+  `context` — **report** effective policy; do not change binding. `config
+  resolve` lists state paths only when the binding file exists.
+- **Explicit rebind:** `state update` (optional `--workspace-style`).
 
 ### Known styles (this ADR)
 

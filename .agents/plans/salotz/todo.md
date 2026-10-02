@@ -7,9 +7,9 @@ Work-process: agent-guidelines personal `work-process.md` (In Progress / Backlog
 
 ### initial-feature-series
 
-Next product feature series after the first vertical slice. **Phases 0–3 done**
-(ids/URI, placement + host state, get + lookup).
-**Next: Phase 4 `config resolve`.** Plan:
+Next product feature series after the first vertical slice. **Phases 0–4 done**
+(ids/URI, placement + host state, get + lookup, config resolve).
+**Next: Phase 5 remainder — `replica create`.** Plan:
 [./initial-feature-series/](./initial-feature-series/).
 
 ## Backlog

@@ -22,7 +22,8 @@ a second full flag dump.
 | `path` / `resolve` | Print workspace path, or replica path when distinguisher given | `path <id>` → workspace; `path <id> <replica>` or `id/replica` → checkout |
 | `workspace ensure` | Create project workspace dirs only | project ids required, or `--all`; no replica leaf; no git |
 | `materialize` | Materialize replica(s) from remote via git | `materialize <id> [replica]` \| `--all` \| `--tag`; optional `--replica`; already-present → ok; no `clone` alias |
-| `config` | Tool config path / show | samples in `examples/`; later `config resolve` |
+| `config` | Tool config path / show / resolve | `config resolve <project-id>` placement stack; `--output json`; samples in `examples/` |
+| `state update` | Rebind host project state from ambient | project ids or `--all`; optional `--workspace-style`; creates or overwrites `state.json` |
 | `catalog` | Catalog path / show (table + declared tags) | samples in `examples/`; ADR 010 |
 | `envvars` | Live env values for this process | docs: `yerk help envvars` |
 | `version` | Print version identity | |

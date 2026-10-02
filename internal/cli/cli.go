@@ -60,6 +60,7 @@ func NewRoot(streams IO) *cobra.Command {
 	root.AddCommand(newReplicaCmd(streams))
 	root.AddCommand(newWorkspaceCmd(streams))
 	root.AddCommand(newMaterializeCmd(streams))
+	root.AddCommand(newStateCmd(streams))
 	root.AddCommand(newConfigCmd(streams))
 	root.AddCommand(newCatalogCmd(streams))
 	root.AddCommand(newEnvvarsCmd(streams))
@@ -992,13 +993,111 @@ func validateReplicaSegment(s string) error {
 	return nil
 }
 
+func newStateCmd(streams IO) *cobra.Command {
+	root := &cobra.Command{
+		Use:   "state",
+		Short: "Host project state (bindings under XDG state)",
+		Long: withEnv(`Inspect or refresh tool-written project bindings (ADR 013).
+
+State lives under $XDG_STATE_HOME/yerk/projects/<domain>/<name>/state.json
+(or YERK__STATE_DIR). First ensure/materialize binds style once; ambient drift
+warns but keeps the binding. Use state update to rebind from current ambient
+configuration (or an explicit --workspace-style).
+
+Subcommands: update.
+
+See also: yerk config resolve <project-id>.`, "state"),
+		RunE: requireSubcommand,
+	}
+	root.AddCommand(newStateUpdateCmd(streams))
+	return root
+}
+
+func newStateUpdateCmd(streams IO) *cobra.Command {
+	var (
+		all       bool
+		styleFlag string
+	)
+	cmd := &cobra.Command{
+		Use:   "update [project...]",
+		Short: "Rebind host project state from current ambient placement",
+		Long: withEnv(`Write or overwrite bound workspace style for named projects.
+
+Computes ambient placement (built-in → host config → dir-local → catalog →
+env → host project row), optionally with --workspace-style, and writes
+state.json. Unlike first-time bind on ensure/materialize, this always
+refreshes an existing binding.
+
+  yerk state update personal/yerk
+  yerk state update --all
+  yerk state update yerk --workspace-style project-dir
+
+Does not create workspace directories or replicas. Project ids only (no replica
+segment). Names and --all are mutually exclusive; bare update with neither is
+an error.
+
+Prefer this over hand-editing state when ambient config changed and you want
+the binding to match. "lock" is avoided as a verb (overloaded with VCS/package
+locks); update names the refresh explicitly.`, "state update"),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if all && len(args) > 0 {
+				return errors.New("state update: pass project names or --all, not both")
+			}
+			if !all && len(args) == 0 {
+				return errors.New("state update: name one or more projects, or pass --all")
+			}
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			cat, err := config.LoadCatalog()
+			if err != nil {
+				return err
+			}
+			projects, err := selectProjects(cat, args, all)
+			if err != nil {
+				return err
+			}
+			res, err := project.NewResolver(cfg, gitcmd.New())
+			if err != nil {
+				return err
+			}
+			res.CLIStyle = styleFlag
+			res.Warn = streams.Err
+			for _, p := range projects {
+				ur, err := res.UpdateState(p)
+				if err != nil {
+					return fmt.Errorf("%s: %w", p.ID(), err)
+				}
+				path, _ := state.ProjectFile(p.Domain, p.Name)
+				switch {
+				case ur.Created:
+					fmt.Fprintf(streams.Out, "created %s workspaceStyle=%s -> %s\n", ur.Project, ur.Style, path)
+				case ur.Changed:
+					fmt.Fprintf(streams.Out, "updated %s workspaceStyle=%s (was %s) -> %s\n", ur.Project, ur.Style, dash(ur.Previous), path)
+				default:
+					fmt.Fprintf(streams.Out, "unchanged %s workspaceStyle=%s -> %s\n", ur.Project, ur.Style, path)
+				}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&all, "all", false, "Update every project in the catalog")
+	cmd.Flags().StringVar(&styleFlag, "workspace-style", "", "Explicit style to bind (skips ambient for this key)")
+	return cmd
+}
+
 func newConfigCmd(streams IO) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "config",
-		Short: "Show tool config path and summary",
+		Short: "Show tool config path, summary, and placement resolve",
 		Long: withEnv(`Inspect tool/host configuration (config.toml), not the project catalog.
 
-Subcommands: path, show.
+Subcommands: path, show, resolve.
+
+  yerk config path                 → config.toml path
+  yerk config show                 → host-global summary
+  yerk config resolve <project-id> → placement contribution stack for a target
 
 Portable sample documents live in the repository under examples/ (not a CLI
 subcommand).`, "config"),
@@ -1097,7 +1196,94 @@ subcommand).`, "config"),
 			return nil
 		},
 	})
+	root.AddCommand(newConfigResolveCmd(streams))
 	return root
+}
+
+func newConfigResolveCmd(streams IO) *cobra.Command {
+	var output string
+	cmd := &cobra.Command{
+		Use:   "resolve <project-id>",
+		Short: "Explain placement layers for a project (why is my style X?)",
+		Long: withEnv(`Show the ordered placement contribution stack for one catalog project.
+
+  yerk config resolve personal/yerk
+  yerk config resolve yerk --output json
+
+v1 dumps placement-related keys (workspace style): ordered file list + each
+layer (built-in → host config → dir-local → catalog → env → host project row →
+bound state → CLI) and the effective snapshot.
+
+Target is a project id (short / bare / yerk://). Replica segments are rejected
+(placement is project-scoped). Host-global summary remains yerk config show.
+
+See ADR 013 (layers) and docs/how-to/explain-placement.md.`, "config resolve"),
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateOutputFlag(output); err != nil {
+				return err
+			}
+			_, cat, res, err := loadResolver(streams)
+			if err != nil {
+				return err
+			}
+			p, ref, err := resolveProjectArgs(cat, args)
+			if err != nil {
+				return err
+			}
+			if ref.IsReplica() {
+				return fmt.Errorf("config resolve: %q includes a replica; placement is project-scoped (omit replica segment)", args[0])
+			}
+			report, err := res.ConfigResolve(p)
+			if err != nil {
+				return err
+			}
+			return printConfigResolve(streams.Out, report, output)
+		},
+	}
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json (default: human text)")
+	return cmd
+}
+
+func printConfigResolve(w io.Writer, rep api.ConfigResolve, output string) error {
+	if strings.TrimSpace(output) == "json" {
+		return writeJSON(w, rep)
+	}
+	fmt.Fprintf(w, "kind:\t%s\n", rep.Kind)
+	fmt.Fprintf(w, "uri:\t%s\n", dash(rep.URI))
+	fmt.Fprintf(w, "target:\t%s\n", dash(rep.Target))
+	fmt.Fprintf(w, "workspacePath:\t%s\n", dash(rep.WorkspacePath))
+	fmt.Fprintf(w, "anchor:\t%s\n", dash(rep.Anchor))
+	fmt.Fprintf(w, "effectiveStyle:\t%s\n", rep.EffectiveStyle)
+	fmt.Fprintf(w, "bound:\t%t\n", rep.Bound)
+	if len(rep.Warnings) > 0 {
+		fmt.Fprintf(w, "warnings:\t%s\n", strings.Join(rep.Warnings, "; "))
+	}
+	fmt.Fprintln(w, "files:")
+	if len(rep.Files) == 0 {
+		fmt.Fprintln(w, "  (none)")
+	} else {
+		for _, f := range rep.Files {
+			fmt.Fprintf(w, "  %s\n", f)
+		}
+	}
+	fmt.Fprintln(w, "contributions:")
+	for _, c := range rep.Contributions {
+		mark := "-"
+		if c.Applies {
+			mark = c.Value
+		}
+		extra := ""
+		if c.Note != "" {
+			extra = " (" + c.Note + ")"
+		}
+		path := ""
+		if c.Path != "" {
+			path = " " + c.Path
+		}
+		fmt.Fprintf(w, "  %d. %s%s  workspaceStyle=%s%s\n", c.Order, c.Layer, path, mark, extra)
+	}
+	return nil
 }
 
 func newCatalogCmd(streams IO) *cobra.Command {

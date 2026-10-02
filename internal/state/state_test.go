@@ -58,6 +58,44 @@ func TestProjectStateRoundTrip(t *testing.T) {
 	}
 }
 
+func TestUpdateStyleOverwrite(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("YERK__STATE_DIR", root)
+
+	ur, err := state.UpdateStyle("personal", "wumpus", "workspace-dir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ur.Created || !ur.Changed || ur.Style != "workspace-dir" {
+		t.Fatalf("%+v", ur)
+	}
+	ur, err = state.UpdateStyle("personal", "wumpus", "project-dir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ur.Created || !ur.Changed || ur.Previous != "workspace-dir" || ur.Style != "project-dir" {
+		t.Fatalf("%+v", ur)
+	}
+	st, ok, err := state.LoadProject("personal", "wumpus")
+	if err != nil || !ok {
+		t.Fatalf("load: %v ok=%v", err, ok)
+	}
+	if st.WorkspaceStyle != "project-dir" {
+		t.Fatalf("style %q", st.WorkspaceStyle)
+	}
+	if st.BoundAt == "" {
+		t.Fatal("BoundAt should be preserved/set")
+	}
+	// No-op same style.
+	ur, err = state.UpdateStyle("personal", "wumpus", "project-dir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ur.Changed || ur.Created {
+		t.Fatalf("same style should be unchanged: %+v", ur)
+	}
+}
+
 func TestDirUsesXDGStateHome(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv("YERK__STATE_DIR", "")

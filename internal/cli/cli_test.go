@@ -864,6 +864,169 @@ default_replica = "main"
 	}
 }
 
+func TestStateUpdateAndResolveNoMissingStateFile(t *testing.T) {
+	dir := t.TempDir()
+	yerkWS := filepath.Join(dir, "devel", "yerk")
+	if err := os.MkdirAll(yerkWS, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `[workspace]
+style = "workspace-dir"
+
+[[projects]]
+name = "yerk"
+domain = "personal"
+path = "` + yerkWS + `"
+`
+	cat := `
+[[projects]]
+name = "yerk"
+domain = "personal"
+remote = "git@example.com:salotz/yerk.git"
+`
+	writeHostConfig(t, dir, cfg, cat)
+	setYerkHostEnv(t, dir)
+
+	var out, errBuf bytes.Buffer
+	streams := cli.IO{Out: &out, Err: &errBuf}
+
+	// No binding yet: resolve must not list a missing state.json path.
+	if err := cli.Execute(context.Background(), streams, []string{"config", "resolve", "yerk"}); err != nil {
+		t.Fatalf("resolve: %v\n%s", err, errBuf.String())
+	}
+	s := out.String()
+	if strings.Contains(s, "state.json") {
+		// files section must not invent the path; contribution note is ok without path.
+		for _, line := range strings.Split(s, "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "files:") {
+				continue
+			}
+			if strings.Contains(line, "state.json") && !strings.Contains(line, "state ") {
+				// contribution lines look like "N. state  workspaceStyle=..."
+				if strings.Contains(line, "/state.json") || strings.Contains(line, "projects/") {
+					t.Fatalf("resolve listed missing state path:\n%s", s)
+				}
+			}
+		}
+	}
+	if !strings.Contains(s, "no binding") {
+		t.Fatalf("want no binding note:\n%s", s)
+	}
+
+	out.Reset()
+	errBuf.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"state", "update", "yerk"}); err != nil {
+		t.Fatalf("state update: %v\n%s", err, errBuf.String())
+	}
+	if !strings.Contains(out.String(), "created") || !strings.Contains(out.String(), "workspaceStyle=workspace-dir") {
+		t.Fatalf("update out:\n%s", out.String())
+	}
+	statePath := filepath.Join(dir, ".state", "projects", "personal", "yerk", "state.json")
+	if _, err := os.Stat(statePath); err != nil {
+		t.Fatalf("state file: %v", err)
+	}
+
+	out.Reset()
+	// Change ambient via env and refresh.
+	t.Setenv("YERK__WORKSPACE_STYLE", "project-dir")
+	if err := cli.Execute(context.Background(), streams, []string{"state", "update", "personal/yerk"}); err != nil {
+		t.Fatalf("state update 2: %v", err)
+	}
+	if !strings.Contains(out.String(), "updated") || !strings.Contains(out.String(), "project-dir") {
+		t.Fatalf("update2:\n%s", out.String())
+	}
+
+	out.Reset()
+	t.Setenv("YERK__WORKSPACE_STYLE", "") // clear for resolve display of bound
+	if err := cli.Execute(context.Background(), streams, []string{"config", "resolve", "yerk"}); err != nil {
+		t.Fatal(err)
+	}
+	s2 := out.String()
+	if !strings.Contains(s2, "effectiveStyle:\tproject-dir") || !strings.Contains(s2, "bound:\ttrue") {
+		t.Fatalf("resolve after update:\n%s", s2)
+	}
+	if !strings.Contains(s2, statePath) {
+		t.Fatalf("resolve should list existing state file:\n%s", s2)
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"state", "update"}); err == nil {
+		t.Fatal("bare update should error")
+	}
+}
+
+func TestConfigResolve(t *testing.T) {
+	dir := t.TempDir()
+	yerkWS := filepath.Join(dir, "devel", "yerk")
+	if err := os.MkdirAll(yerkWS, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Dir-local under devel → project-dir
+	localDir := filepath.Join(dir, "devel", ".local", "yerk")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(localDir, "config.toml"), []byte(`[workspace]
+style = "project-dir"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `[workspace]
+style = "workspace-dir"
+
+[[projects]]
+name = "yerk"
+domain = "personal"
+path = "` + yerkWS + `"
+`
+	cat := `
+[[projects]]
+name = "yerk"
+domain = "personal"
+remote = "git@example.com:salotz/yerk.git"
+default_replica = "main"
+`
+	writeHostConfig(t, dir, cfg, cat)
+	setYerkHostEnv(t, dir)
+
+	var out, errBuf bytes.Buffer
+	streams := cli.IO{Out: &out, Err: &errBuf}
+	if err := cli.Execute(context.Background(), streams, []string{"config", "resolve", "personal/yerk"}); err != nil {
+		t.Fatalf("config resolve: %v\n%s", err, errBuf.String())
+	}
+	s := out.String()
+	if !strings.Contains(s, "kind:\tConfigResolve") {
+		t.Fatalf("human:\n%s", s)
+	}
+	if !strings.Contains(s, "effectiveStyle:\tproject-dir") {
+		t.Fatalf("want project-dir from dir-local:\n%s", s)
+	}
+	if !strings.Contains(s, "dir-local") || !strings.Contains(s, "host-config") {
+		t.Fatalf("contributions:\n%s", s)
+	}
+	if !strings.Contains(s, yerkWS) {
+		t.Fatalf("workspace path:\n%s", s)
+	}
+
+	out.Reset()
+	errBuf.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"config", "resolve", "yerk", "--output", "json"}); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	js := out.String()
+	if !strings.Contains(js, `"kind": "ConfigResolve"`) || !strings.Contains(js, `"effectiveStyle": "project-dir"`) {
+		t.Fatalf("json:\n%s", js)
+	}
+	if !strings.Contains(js, `"layer": "dir-local"`) {
+		t.Fatalf("json layers:\n%s", js)
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"config", "resolve", "yerk/main"}); err == nil {
+		t.Fatal("replica id should error")
+	}
+}
+
 func TestGetAndLookup(t *testing.T) {
 	dir := t.TempDir()
 	yerkWS := filepath.Join(dir, "devel", "yerk")

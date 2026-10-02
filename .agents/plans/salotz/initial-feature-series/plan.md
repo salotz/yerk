@@ -404,16 +404,16 @@ only when operator reprioritizes.
 
 ## Immediate next step
 
-**Done this chunk:** Phase 3 closed — ADR 015; `api.ProjectInfo` /
-`ReplicaInfo`; `project.ProjectInfo` / `ReplicaInfo` / `LookupPath`; CLI
-`get`, `lookup`, `project|replica get|lookup` with human + `--output json`;
-tests + docs/how-to.
+**Done this chunk:** Phase 4 follow-up — `config resolve` omits missing
+state.json paths; **`yerk state update`** explicit rebind (Q34; not “lock”);
+ADR 013 note; tests + how-to.
 
-**Next (default on go):** **Phase 4** — `yerk config resolve <target>`
-(ordered contribution list + effective placement keys; same merge as ADR 013).
+**Next (default on go):** **Phase 5 remainder** — `replica create` +
+`replica-method` (worktree \| clone), git worktree add, hard error if main
+missing for worktree.
 
 Alternates if operator widens scope:
 
-1. Phase 5 remainder — `replica create` + worktree method  
-2. Phase 8 slice — `workspace ensure --tag` / broader `--output` formats  
-3. Phase 6 — agent `context` dumps (builds on get/lookup)
+1. Phase 8 slice — `workspace ensure --tag` / broader `--output` formats  
+2. Phase 6 — agent `context` dumps (builds on get/lookup + resolve)  
+3. Phase 7 — additional workspace styles

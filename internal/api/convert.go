@@ -83,6 +83,14 @@ func NewReplicaInfo() ReplicaInfo {
 	}
 }
 
+// NewConfigResolve returns a ConfigResolve with TypeMeta fields set.
+func NewConfigResolve() ConfigResolve {
+	return ConfigResolve{
+		APIVersion: APIVersion,
+		Kind:       KindConfigResolve,
+	}
+}
+
 // Summary returns a compact ReplicaSummary from a full ReplicaStatus.
 func (r ReplicaStatus) Summary() ReplicaSummary {
 	return ReplicaSummary{

@@ -147,6 +147,45 @@ func (r Resolver) BindOnInit(p config.Project) error {
 	return nil
 }
 
+// UpdateStateResult is the outcome of UpdateState for one project.
+type UpdateStateResult struct {
+	Project  string
+	Style    string
+	Previous string
+	Created  bool
+	Changed  bool
+}
+
+// UpdateState rebinds host project state from current ambient placement
+// (and optional CLIStyle). Unlike BindOnInit, overwrites an existing binding.
+// Use yerk state update for explicit refresh after ambient config changes.
+func (r Resolver) UpdateState(p config.Project) (UpdateStateResult, error) {
+	in := placement.Input{
+		Host:     r.Cfg,
+		Project:  p,
+		CLIStyle: r.CLIStyle,
+	}
+	if ws, err := r.WorkspacePath(p); err == nil {
+		in.Anchor = ws
+	}
+	// Skip existing state so ambient+CLI is the source of the new binding.
+	style, err := placement.InitStyle(in)
+	if err != nil {
+		return UpdateStateResult{}, err
+	}
+	ur, err := state.UpdateStyle(p.Domain, p.Name, style)
+	if err != nil {
+		return UpdateStateResult{}, err
+	}
+	return UpdateStateResult{
+		Project:  p.ID(),
+		Style:    ur.Style,
+		Previous: ur.Previous,
+		Created:  ur.Created,
+		Changed:  ur.Changed,
+	}, nil
+}
+
 // StatusOptions controls status collection.
 type StatusOptions struct {
 	// Git enables change probes when a replica is present (default for CLI).

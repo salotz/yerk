@@ -69,6 +69,27 @@ Most catalog projects need **no** host row when a domain root is set.
 $XDG_STATE_HOME/yerk/projects/<domain>/<project>/state.json
 ```
 
+First successful `workspace ensure` / `materialize` **binds** style once.
+Refresh or create bindings explicitly:
+
+```sh
+yerk state update <project-id>
+yerk state update --all
+```
+
+See [How to refresh host project state](../how-to/update-project-state.md).
+
+## Explain placement for one project
+
+```sh
+yerk config resolve <project-id>
+yerk config resolve <project-id> --output json
+```
+
+Ordered file list + contribution stack + effective workspace style (v1).
+Missing state bindings are noted but **not** listed under files. See
+[How to explain placement](../how-to/explain-placement.md).
+
 ## See also
 
 - [Catalog reference](./catalog.md)

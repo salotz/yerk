@@ -43,13 +43,15 @@ Do not put operator answers here (use [decisions.md](./decisions.md)).
 - [x] Human default; `--output json` when practical
 - [x] Tests + agent-oriented docs
 
-## Phase 4 — `config resolve`  **← next**
+## Phase 4 — `config resolve`
 
-- [ ] Command: `yerk config resolve <target>`
-- [ ] Ordered contribution list + effective placement keys
-- [ ] Tests on fixture trees; docs “why is my style X?”
+- [x] Command: `yerk config resolve <target>`
+- [x] Ordered contribution list + effective placement keys
+- [x] Tests on fixture trees; docs “why is my style X?”
+- [x] Follow-up: omit missing `state.json` from files list
+- [x] Follow-up: `yerk state update` explicit rebind (not “lock”)
 
-## Phase 5 — materialize + replica create
+## Phase 5 — materialize + replica create  **← next**
 
 - [x] Rename `yerk clone` → `yerk materialize` (no alias)
 - [x] Docs/help/tests/examples updated for materialize

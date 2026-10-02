@@ -1,9 +1,11 @@
 // Package placement merges layered workspace policy (ADR 013).
 //
 // Ambient stack (low → high): built-in → host config → dir-local (near wins) →
-// catalog row → YERK__WORKSPACE_STYLE.
+// catalog row → YERK__WORKSPACE_STYLE → host [[projects]] row.
 // Bound host project state overrides ambient with warnings.
 // Explicit CLI overrides ambient; contradicts bound state → error.
+//
+// Explain returns the same merge as a contribution report (config resolve).
 package placement
 
 import (
@@ -15,8 +17,6 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/salotz/yerk/internal/config"
-	"github.com/salotz/yerk/internal/state"
-	"github.com/salotz/yerk/internal/workspace"
 )
 
 // LocalConfigRel is the relative path under each directory for dir-local yerk config.
@@ -52,99 +52,13 @@ type Effective struct {
 }
 
 // Resolve merges layers into an Effective style (ADR 013).
+// Implementation shares the stack with Explain (config resolve).
 func Resolve(in Input) (Effective, error) {
-	lookup := in.LookupEnv
-	if lookup == nil {
-		lookup = os.Getenv
-	}
-
-	var eff Effective
-	style := workspace.StyleWorkspaceDir
-	eff.Sources = append(eff.Sources, "built-in:"+style)
-
-	hostStyle := strings.TrimSpace(in.Host.Workspace.Style)
-	if hostStyle != "" {
-		style = hostStyle
-		eff.Sources = append(eff.Sources, "host-config:"+style)
-	}
-
-	anchor := strings.TrimSpace(in.Anchor)
-	if anchor == "" {
-		if cwd, err := os.Getwd(); err == nil {
-			anchor = cwd
-		}
-	}
-	locals, err := collectDirLocalStyles(anchor)
+	rep, err := Explain(in)
 	if err != nil {
 		return Effective{}, err
 	}
-	for _, layer := range locals {
-		if layer.Style == "" {
-			continue
-		}
-		style = layer.Style
-		eff.Sources = append(eff.Sources, "dir-local:"+layer.Path+":"+style)
-	}
-
-	catStyle := strings.TrimSpace(in.Project.WorkspaceStyle)
-	if catStyle != "" {
-		style = catStyle
-		eff.Sources = append(eff.Sources, "catalog:"+style)
-	}
-
-	envStyle := strings.TrimSpace(lookup("YERK__WORKSPACE_STYLE"))
-	if envStyle != "" {
-		style = envStyle
-		eff.Sources = append(eff.Sources, "env:"+style)
-	}
-
-	// Host [[projects]] row override (config.toml): more specific than process env.
-	if hp, ok := in.Host.FindHostProject(in.Project.Domain, in.Project.Name); ok {
-		if hs := strings.TrimSpace(hp.WorkspaceStyle); hs != "" {
-			style = hs
-			eff.Sources = append(eff.Sources, "host-project:"+style)
-		}
-	}
-
-	ambientStyle := style
-	ambientSource := lastSource(eff.Sources)
-
-	if !in.SkipState {
-		st, ok, err := state.LoadProject(in.Project.Domain, in.Project.Name)
-		if err != nil {
-			return Effective{}, err
-		}
-		if ok {
-			bound := strings.TrimSpace(st.WorkspaceStyle)
-			if bound != "" {
-				eff.Bound = true
-				if bound != ambientStyle {
-					eff.Warnings = append(eff.Warnings, fmt.Sprintf(
-						"placement: bound workspace style %q differs from ambient %q (%s); using bound style",
-						bound, ambientStyle, ambientSource))
-				}
-				style = bound
-				eff.Sources = append(eff.Sources, "state:"+style)
-			}
-		}
-	}
-
-	cliStyle := strings.TrimSpace(in.CLIStyle)
-	if cliStyle != "" {
-		if eff.Bound && cliStyle != style {
-			return Effective{}, fmt.Errorf(
-				"placement: --workspace-style=%q contradicts bound style %q (rebind not implemented; edit state or omit the flag)",
-				cliStyle, style)
-		}
-		style = cliStyle
-		eff.Sources = append(eff.Sources, "cli:"+style)
-	}
-
-	if err := workspace.ValidateStyle(style); err != nil {
-		return Effective{}, err
-	}
-	eff.Style = style
-	return eff, nil
+	return rep.Effective, nil
 }
 
 type dirLocalLayer struct {

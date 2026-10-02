@@ -158,3 +158,49 @@ func BindStyle(domain, project, style string) (written bool, err error) {
 	}
 	return true, nil
 }
+
+// UpdateResult describes one UpdateStyle call.
+type UpdateResult struct {
+	// Created is true when no binding existed before.
+	Created bool
+	// Changed is true when workspaceStyle differed from the previous value
+	// (always true when Created).
+	Changed bool
+	// Previous is the prior workspaceStyle (empty if Created).
+	Previous string
+	// Style is the style written.
+	Style string
+}
+
+// UpdateStyle writes or overwrites the bound workspace style (explicit rebind).
+// Unlike BindStyle, an existing binding is replaced. BoundAt is preserved when
+// refreshing; UpdatedAt is always refreshed via SaveProject.
+func UpdateStyle(domain, project, style string) (UpdateResult, error) {
+	style = strings.TrimSpace(style)
+	if style == "" {
+		return UpdateResult{}, fmt.Errorf("update style: empty workspace style")
+	}
+	existing, ok, err := LoadProject(domain, project)
+	if err != nil {
+		return UpdateResult{}, err
+	}
+	res := UpdateResult{Style: style}
+	st := Project{
+		APIVersion:     api.APIVersion,
+		WorkspaceStyle: style,
+	}
+	if ok {
+		res.Previous = strings.TrimSpace(existing.WorkspaceStyle)
+		st.BoundAt = existing.BoundAt
+		if res.Previous != style {
+			res.Changed = true
+		}
+	} else {
+		res.Created = true
+		res.Changed = true
+	}
+	if err := SaveProject(domain, project, st); err != nil {
+		return UpdateResult{}, err
+	}
+	return res, nil
+}

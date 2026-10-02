@@ -599,6 +599,32 @@ Operator 2026-09-30. Update plan CLI sketches accordingly.
 
 ---
 
+## Q34 — Explicit state rebind command name
+
+Status: locked
+
+### Prompt
+
+Name for “regenerate / refresh host project bindings from current ambient”?
+Candidates included lock-like verbs.
+
+### Answer
+
+**`yerk state update [project…|--all]`** with optional `--workspace-style`.
+
+- Parent noun **`state`** matches XDG state / `state.json`.
+- Verb **`update`** = create or overwrite binding from ambient (or explicit style).
+- Reject **lock** (overloaded: VCS locks, package locks, freeze semantics).
+- First bind remains ensure/materialize no-op-if-exists; update is the explicit
+  rebind path (ADR 013 amendment).
+
+### Notes
+
+Operator 2026-10-01. Also: `config resolve` must not list missing state paths
+under `files` (contribution note only).
+
+---
+
 ## Q25 — Context dump command names
 
 Status: locked

@@ -11,6 +11,7 @@ const (
 	KindReplicaStatus = "ReplicaStatus"
 	KindProjectInfo   = "ProjectInfo"
 	KindReplicaInfo   = "ReplicaInfo"
+	KindConfigResolve = "ConfigResolve"
 )
 
 // Presence is on-disk presence of an expected path (replica checkout or,
@@ -171,6 +172,43 @@ type ReplicaInfo struct {
 	Placement *PlacementInfo `json:"placement,omitempty"`
 	// MatchedPath is the absolute path that triggered lookup (lookup only).
 	MatchedPath string `json:"matchedPath,omitempty"`
+}
+
+// ConfigResolveContribution is one layer in a config resolve dump (ADR 015 follow-on / Phase 4).
+type ConfigResolveContribution struct {
+	Order   int    `json:"order"`
+	Layer   string `json:"layer"`
+	Path    string `json:"path,omitempty"`
+	Key     string `json:"key"`
+	Value   string `json:"value,omitempty"`
+	Applies bool   `json:"applies"`
+	Note    string `json:"note,omitempty"`
+}
+
+// ConfigResolve is the target-scoped placement contribution report (config resolve).
+type ConfigResolve struct {
+	// APIVersion is the resource API version (yerk/v1).
+	APIVersion string `json:"apiVersion"`
+	// Kind is always KindConfigResolve.
+	Kind string `json:"kind"`
+	// URI is the canonical project URI when the target is a project.
+	URI string `json:"uri,omitempty"`
+	// Target is the bare project id or path argument as resolved.
+	Target string `json:"target,omitempty"`
+	// Anchor is the dir-local walk start path.
+	Anchor string `json:"anchor,omitempty"`
+	// WorkspacePath is the resolved project workspace when known.
+	WorkspacePath string `json:"workspacePath,omitempty"`
+	// EffectiveStyle is the winning workspace style.
+	EffectiveStyle string `json:"effectiveStyle"`
+	// Bound is true when host project state supplied the winning style.
+	Bound bool `json:"bound"`
+	// Warnings are ambient drift messages.
+	Warnings []string `json:"warnings,omitempty"`
+	// Files are file paths considered (ordered, unique).
+	Files []string `json:"files,omitempty"`
+	// Contributions is the ordered layer stack.
+	Contributions []ConfigResolveContribution `json:"contributions"`
 }
 
 // ProjectStatus is a project-scoped status view (workspace + optional replica summary).

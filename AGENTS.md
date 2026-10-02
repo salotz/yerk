@@ -67,6 +67,11 @@ shell activation.
   unique name / `yerk://…` (ADR 012; package `internal/id`). `domain` is
   required on every catalog project. `get`/`lookup` return project or
   replica info (placement + paths + presence); `--output json` (ADR 015).
+  `config resolve <project-id>` dumps ordered placement contributions +
+  effective style (ADR 013); missing state.json is not listed under files.
+  `state update` rebinds host project state from ambient (or
+  `--workspace-style`); creates or overwrites bindings (unlike one-shot
+  bind on ensure/materialize).
   `workspace ensure` creates the project workspace directory only (not a
   replica leaf); requires project ids or `--all` (ADR 009). `materialize`
   (renamed from `clone`; no alias) supports single project or bulk
