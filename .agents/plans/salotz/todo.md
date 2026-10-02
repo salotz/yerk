@@ -1,53 +1,63 @@
 # salotz plans
 
 Owner index for `.agents/plans/salotz/`.
-Work-process: agent-guidelines personal `work-process.md` (In Progress / Backlog only).
+Work-process: agent-guidelines personal work-process (In Progress / Backlog only).
+
+One logical feature (or tight feature set) per plan folder. Do not merge
+unrelated tracks into a single “mega plan.”
 
 ## In Progress
 
-### initial-feature-series
+### ci-pipelines
 
-Next product feature series after the first vertical slice. **Phases 0–7 done**
-(ids/URI, placement, get/lookup, config resolve, materialize + replica create,
-context dumps, name-tags style). **Next: Phase 8 polish** (`ensure --tag`,
-shared `--output`) or Phase 9 sync design. Plan:
-[./initial-feature-series/](./initial-feature-series/).
+Remote CI matching local `mise run check` + build. **Next: Phase 0** lock host /
+triggers / jobs, then workflow.
+Plan: [./ci-pipelines/](./ci-pipelines/).
 
 ## Backlog
 
-### Parallel change probes
+### install-distribution
 
-Serial status probes are enough for now. Later: errgroup/semaphore parallel
-probes + deterministic fake git adapter tests. Came out of initial-feature-series
-(held by operator). Soft dep: stable serial path and api status resources (already
-on main).
+Installable binaries for operators (mise and similar), version ldflags, release
+artifacts, install how-to. Soft pref: CI green first.
+Plan: [./install-distribution/](./install-distribution/).
 
-### Domain model glossary
+### sync-verbs-design
 
-Add a durable **glossary** of product nouns (project, catalog, domain, workspace,
-replica, presence/change, identifier/`yerk://`, materialize, …) for operators and
-agents. Prefer a single canonical page (e.g. under `docs/explanation/` or
-`design/architecture/`) and thin cross-links from concepts/identifiers stubs.
-Suggested folder once spawned: `domain-model-glossary`. Soft dep: current
-vocabulary is still concentrated in `design/domain-and-near-term.md` (pre-rename).
+Design-only ADR for `pull` / `push` (no CLI stubs). Carried from
+initial-feature-series Phase 9.
+Plan: [./sync-verbs-design/](./sync-verbs-design/).
 
-### Domain spine → architecture layout
+### parallel-change-probes
 
-Rename/move the design spine out of the catch-all
-`design/domain-and-near-term.md` name into a clearer **architecture** home
-(e.g. `design/architecture/domain-model.md` or similar; drop “near-term” from
-the title once the first slice is historical). Update AGENTS.md, ADR Related
-links, docs hubs, and plan pointers that cite the old path. Soft dep: may
-bundle with glossary so one pass rewires links. Suggested folder:
-`domain-spine-architecture-move`.
+Parallelize status git change probes (limit, stable order, fake adapter tests).
+Plan: [./parallel-change-probes/](./parallel-change-probes/).
 
-### Dead documentation cleanup (+ agent/role)
+### domain-model-glossary
 
-Inventory and remove or rewrite **stale/dead docs**: outdated command names
-(`clone` leftovers), superseded path/identity prose, empty Diátaxis stubs that
-lie, and links into deleted plan paths. Prefer a small reusable **agent role /
-recipe** (checklist: link crawl, command-help vs docs drift, ADR status vs
-text) so future cleanups are not one-off chat. Safety: preview-only deletes
-until operator accepts; no host-private paths. Suggested folder:
-`docs-deadwood-cleanup-role`.
+Canonical glossary of product nouns; cross-links from docs hubs.
+Plan: [./domain-model-glossary/](./domain-model-glossary/).
 
+### domain-spine-architecture-move
+
+Rename/move `design/domain-and-near-term.md` → architecture home; rewire links.
+May bundle link pass with glossary.
+Plan: [./domain-spine-architecture-move/](./domain-spine-architecture-move/).
+
+### docs-deadwood-cleanup
+
+Stale docs inventory/fix + reusable agent cleanup checklist/role.
+Plan: [./docs-deadwood-cleanup/](./docs-deadwood-cleanup/).
+
+## Done (recent)
+
+### initial-feature-series
+
+Closed 2026-10-02. Phases 0–8 shipped. Plan folder removed. Sync design and
+distribution tracks split into the backlog plans above (not one combined plan).
+
+### distribution-and-followons
+
+Never executed as a mega-plan; **split** 2026-10-02 into ci-pipelines (In
+Progress), install-distribution, sync-verbs-design, and the former backlog
+items as first-class plan folders.

@@ -91,10 +91,9 @@ Rules:
 - Declared tag with zero projects → empty match (not an error) for **read** ops
   (`status`); **mutate** ops (`materialize`) refuse empty selection.
 - For mutate commands that support bulk: project args, `--all`, and `--tag` are
-  mutually exclusive (one selector). Names and `--all` also exclusive on
-  `workspace ensure` (ADR 009); ensure still lacks `--tag`.
-- Implementation path: `Catalog.SelectByTag` + `selectProjects` / materialize
-  selection helper.
+  mutually exclusive (one selector), including `workspace ensure` (ADR 009).
+- Implementation path: `Catalog.SelectByTag` + `resolveBulkProjectSelection` /
+  materialize selection helper.
 
 ---
 
@@ -295,14 +294,14 @@ In scope:
 
 1. **Status** — project vs replica scopes; workspace-oriented project view;
    **change on by default** (opt-out); serial then parallel probes.
-2. **Tag vocabulary + bulk select** — closed catalog `tags`; `status --tag`
-   (ADR 010); extend selector to ensure/clone.
+2. **Tag vocabulary + bulk select** — closed catalog `tags`; `status` /
+   `materialize` / `workspace ensure --tag` (ADR 010).
 3. **Ensure** project workspace directories (ADR 009).
-4. **Clone** default-branch replica.
+4. **Materialize** default-branch replica (ex-clone; no alias).
 5. **Resolve** paths (`yerk path`).
-6. **Explicit API resources** pilot — typed model package, then json/yaml,
-   schemas, `yerk get` as follow-ons.
-7. **Push/pull design** before any sync CLI.
+6. **Explicit API resources** — typed model + `--output json|yaml|table`
+   (ADR 011/019); `yerk get` / lookup / context shipped.
+7. **Push/pull design** before any sync CLI (follow-on plan).
 
 Explicitly out of near-term (or blocked):
 
