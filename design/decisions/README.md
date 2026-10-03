@@ -26,3 +26,4 @@ Architecture decision records for `yerk`.
 | [020](./020-git-adapter-subprocess.md) | Git adapter stays subprocess (not go-git) |
 | [021](./021-mit-license.md) | MIT license |
 | [022](./022-domain-bulk-selection.md) | Domain bulk selection (`--domain`) |
+| [023](./023-growth-versioning.md) | Growth Versioning (RFC 002, B.R.G) |

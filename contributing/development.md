@@ -44,7 +44,37 @@ Standalone (any Go toolchain):
 go build -o yerk ./cmd/yerk
 ```
 
-Link-time version identity (optional):
+### Product version (Growth Versioning)
+
+Product versions use **Growth Versioning** `B.R.G`
+([ADR 023](../design/decisions/023-growth-versioning.md), salotz RFC 002)—not
+classic SemVer meanings. Release identity is a **git tag** `vB.R.G`; the binary
+stamp is `B.R.G` without the `v`. Untagged/dev builds keep `0.0.0-dev` until
+ldflags stamping is wired (install-distribution).
+
+**Bump in practice** (helper under `.tasks/version-bump`):
+
+```sh
+mise run version-show
+# dry-run next tag (no git writes):
+mise run version-bump -- growth        # G+1  (aliases: g, patch)
+mise run version-bump -- regression    # R+1  (aliases: r, minor)
+mise run version-bump -- breakage      # B+1, G=0  (aliases: b, major)
+
+# cut a release on a clean HEAD:
+mise run version-bump -- growth --tag
+git push origin v0.0.1                 # or: … --tag --push
+```
+
+Without `--tag`, the task only prints current → next. With `--tag` it creates
+an **annotated** tag on `HEAD` (refuses a dirty tree unless `--force`).
+
+**CI today:** there is no remote pipeline yet ([ci-pipelines](../.agents/plans/salotz/ci-pipelines/)
+plan). Pushing a tag does nothing automatic until a workflow listens for
+`v*` tags (release) or PR/main pushes (check). Checks need not run only on
+tags; release/publish jobs usually do.
+
+Manual ldflags (until `mise run build` stamps from git):
 
 ```sh
 go build -ldflags "-X github.com/salotz/yerk/internal/version.Version=0.1.0" -o yerk ./cmd/yerk

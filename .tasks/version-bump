@@ -1,0 +1,263 @@
+#!/usr/bin/env sh
+# Bump Growth Versioning (B.R.G) product version and optionally create a git tag.
+# Spec: design/decisions/023-growth-versioning.md (salotz RFC 002)
+#
+# Usage:
+#   version-bump show
+#   version-bump bump <part> [--tag] [--push] [--force]
+#   version-bump --help
+#
+# <part> (RFC names preferred):
+#   growth | g | patch     → G+1
+#   regression | r | minor → R+1
+#   breakage | b | major   → B+1, G=0
+#
+# Without --tag: print the next version only (no git writes).
+# With --tag: create annotated tag vB.R.G on HEAD (refuses dirty tree unless --force).
+# With --push: git push origin refs/tags/vB.R.G (implies --tag).
+
+set -eu
+
+usage() {
+	cat <<'EOF'
+Growth Versioning helper (B.R.G — ADR 023 / salotz RFC 002)
+
+  mise run version:show
+  mise run version:bump -- <part> [--tag] [--push] [--force]
+
+Parts:
+  growth | g | patch       increment G (noteworthy growth)
+  regression | r | minor   increment R (noteworthy regression)
+  breakage | b | major     increment B and reset G to 0
+
+SemVer-shaped aliases map by *position* only; meanings follow RFC 002, not
+classic MAJOR.MINOR.PATCH.
+
+Default (no --tag): print current and next versions; do not modify git.
+
+  --tag     create annotated tag vB.R.G at HEAD
+  --push    push that tag to origin (implies --tag)
+  --force   allow --tag on a dirty worktree
+
+Examples:
+  mise run version:bump -- growth
+  mise run version:bump -- g --tag
+  mise run version:bump -- breakage --tag --push
+EOF
+}
+
+# Latest vB.R.G tag, or empty if none.
+latest_tag() {
+	# Prefer exact-match describe of HEAD when it is a release tag.
+	if t=$(git describe --tags --exact-match HEAD 2>/dev/null); then
+		case "$t" in
+		v[0-9]*.[0-9]*.[0-9]*)
+			if brg_ok "${t#v}"; then
+				printf '%s\n' "$t"
+				return 0
+			fi
+			;;
+		esac
+	fi
+	# Else highest vB.R.G by version sort (not necessarily on HEAD).
+	_tags=$(git tag -l 'v[0-9]*' --sort=-v:refname 2>/dev/null || true)
+	for t in $_tags; do
+		case "$t" in
+		v[0-9]*.[0-9]*.[0-9]*)
+			if brg_ok "${t#v}"; then
+				printf '%s\n' "$t"
+				return 0
+			fi
+			;;
+		esac
+	done
+	return 0
+}
+
+# True if $1 is exactly B.R.G with non-negative integers (no prerelease suffix).
+brg_ok() {
+	case "$1" in
+	'' | *[!0-9.]* | .* | *. | *..*) return 1 ;;
+	esac
+	b=${1%%.*}
+	rest=${1#*.}
+	case "$rest" in
+	*.*) ;;
+	*) return 1 ;;
+	esac
+	r=${rest%%.*}
+	g=${rest#*.}
+	case "$b$r$g" in
+	'' | *[!0-9]*) return 1 ;;
+	esac
+	case "$g" in
+	*.*) return 1 ;;
+	esac
+	return 0
+}
+
+parse_brg() {
+	# sets B R G from tag or 0.0.0
+	tag=${1:-}
+	if [ -z "$tag" ]; then
+		B=0
+		R=0
+		G=0
+		return 0
+	fi
+	rest=${tag#v}
+	B=${rest%%.*}
+	rest=${rest#*.}
+	R=${rest%%.*}
+	G=${rest#*.}
+}
+
+normalize_part() {
+	case "$1" in
+	growth | g | patch) printf '%s\n' growth ;;
+	regression | r | minor) printf '%s\n' regression ;;
+	breakage | b | major) printf '%s\n' breakage ;;
+	*)
+		printf 'error: unknown part %s (want growth|regression|breakage or g|r|b / patch|minor|major)\n' "$1" >&2
+		return 1
+		;;
+	esac
+}
+
+cmd_show() {
+	tag=$(latest_tag || true)
+	if [ -z "$tag" ]; then
+		printf 'current_tag: (none)\n'
+		printf 'current:     0.0.0\n'
+	else
+		parse_brg "$tag"
+		printf 'current_tag: %s\n' "$tag"
+		printf 'current:     %s.%s.%s\n' "$B" "$R" "$G"
+	fi
+	if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+		printf 'head:        %s\n' "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+		if git describe --tags --exact-match HEAD >/dev/null 2>&1; then
+			printf 'head_tag:    %s\n' "$(git describe --tags --exact-match HEAD)"
+		else
+			printf 'head_tag:    (untagged)\n'
+		fi
+	fi
+}
+
+cmd_bump() {
+	part_raw=${1:-}
+	if [ -z "$part_raw" ]; then
+		usage >&2
+		return 2
+	fi
+	shift
+	do_tag=0
+	do_push=0
+	do_force=0
+	while [ $# -gt 0 ]; do
+		case "$1" in
+		--tag) do_tag=1 ;;
+		--push)
+			do_push=1
+			do_tag=1
+			;;
+		--force) do_force=1 ;;
+		-h | --help)
+			usage
+			return 0
+			;;
+		*)
+			printf 'error: unknown flag %s\n' "$1" >&2
+			return 2
+			;;
+		esac
+		shift
+	done
+
+	part=$(normalize_part "$part_raw") || return 1
+
+	tag=$(latest_tag || true)
+	parse_brg "$tag"
+	cur="$B.$R.$G"
+	case "$part" in
+	growth) G=$((G + 1)) ;;
+	regression) R=$((R + 1)) ;;
+	breakage)
+		B=$((B + 1))
+		G=0
+		;;
+	esac
+	next="$B.$R.$G"
+	next_tag="v$next"
+
+	printf 'part:        %s\n' "$part"
+	printf 'current:     %s\n' "$cur"
+	if [ -n "$tag" ]; then
+		printf 'current_tag: %s\n' "$tag"
+	else
+		printf 'current_tag: (none)\n'
+	fi
+	printf 'next:        %s\n' "$next"
+	printf 'next_tag:    %s\n' "$next_tag"
+
+	if [ "$do_tag" -eq 0 ]; then
+		printf '\n(dry) no tag created; re-run with --tag to annotate HEAD as %s\n' "$next_tag"
+		return 0
+	fi
+
+	if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+		printf 'error: not a git work tree\n' >&2
+		return 1
+	fi
+
+	if [ "$do_force" -eq 0 ]; then
+		if [ -n "$(git status --porcelain 2>/dev/null || true)" ]; then
+			printf 'error: worktree dirty; commit/stash or pass --force\n' >&2
+			return 1
+		fi
+	fi
+
+	if git rev-parse -q --verify "refs/tags/$next_tag" >/dev/null 2>&1; then
+		printf 'error: tag %s already exists\n' "$next_tag" >&2
+		return 1
+	fi
+
+	msg="Release $next_tag (Growth Versioning B.R.G; ADR 023)"
+	git tag -a "$next_tag" -m "$msg"
+	printf '\ncreated annotated tag %s at %s\n' "$next_tag" "$(git rev-parse --short HEAD)"
+
+	if [ "$do_push" -eq 1 ]; then
+		git push origin "refs/tags/$next_tag"
+		printf 'pushed %s to origin\n' "$next_tag"
+	else
+		printf 'local only; push with: git push origin %s\n' "$next_tag"
+		printf 'or: mise run version-bump -- %s --tag --push\n' "$part_raw"
+	fi
+}
+
+main() {
+	if [ $# -eq 0 ]; then
+		usage >&2
+		return 2
+	fi
+	case "$1" in
+	-h | --help | help)
+		usage
+		return 0
+		;;
+	show)
+		shift
+		cmd_show "$@"
+		;;
+	bump)
+		shift
+		cmd_bump "$@"
+		;;
+	*)
+		# bare part: treat as bump <part>
+		cmd_bump "$@"
+		;;
+	esac
+}
+
+main "$@"

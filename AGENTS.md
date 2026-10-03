@@ -6,6 +6,7 @@ This project follows the guidelines at https://github.com/salotz/agent-guideline
 - Read `content/shared/generic-agent-guidelines.md` (or equivalent) for agent-assisted work.
 - Prefer task-specific tools over shell.
 - Follow salotz RFC 22 (project layout), RFC 23/24 (host context), RFC 28 (PRJX).
+- Product versioning: Growth Versioning B.R.G (salotz RFC 002; [ADR 023](./design/decisions/023-growth-versioning.md)) — not classic SemVer meanings.
 - Cache remote resources locally when possible.
 - Use compacted inlining for referenced standards.
 - Check `content/shared/summaries/` before fetching full external standards.

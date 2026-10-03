@@ -7,8 +7,8 @@
 
 ## Phase 1 — Version identity
 
-- [ ] Tag / version scheme documented
-- [ ] `mise run build` (and release build) can stamp `internal/version`
+- [x] Tag / version scheme documented (ADR 023; `mise run version-show` / `version-bump`)
+- [ ] `mise run build` (and release build) can stamp `internal/version` from tag
 - [ ] `yerk version` reflects stamp on tagged builds; dev builds still sensible
 
 ## Phase 2 — Artifacts + channel

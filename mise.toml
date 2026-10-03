@@ -49,3 +49,13 @@ run = ".local/bin/yerk"
 [tasks.clean]
 description = "Remove local build outputs (keeps module cache)"
 run = "rm -f .local/bin/yerk"
+
+# Growth Versioning (B.R.G) — ADR 023. Longer logic in .tasks/version-bump.
+# Invoke: mise run version-show | mise run version-bump -- growth [--tag]
+[tasks.version-show]
+description = "Show latest product version tag (B.R.G)"
+run = "sh .tasks/version-bump show"
+
+[tasks.version-bump]
+description = "Bump B.R.G (growth|regression|breakage); optional --tag/--push"
+run = "sh .tasks/version-bump bump"

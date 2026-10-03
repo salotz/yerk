@@ -45,11 +45,15 @@ Lock Q1–Q5: channel, artifact matrix, version scheme, release automation,
 
 ## Phase 1 — Version identity
 
-1. Define stamp: `-ldflags "-X …Version=…"` (exact path from code).
-2. Wire optional stamp into `mise run build` and/or release script.
-3. Document dirty/dev behavior when untagged.
+Scheme is locked: **ADR 023** (Growth Versioning B.R.G; tags `vB.R.G`).
 
-**Exit:** tagged build shows expected version string.
+1. Stamp via `-ldflags "-X github.com/salotz/yerk/internal/version.Version=…"`
+   (plus Commit / BuildDate as useful).
+2. Wire optional stamp into `mise run build` and/or release script from **git
+   tag** (canonical) — no multi-file hand version bumps.
+3. Document dirty/dev behavior when untagged (`0.0.0-dev` or derived).
+
+**Exit:** tagged build shows expected `B.R.G` string.
 
 ---
 

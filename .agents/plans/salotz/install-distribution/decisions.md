@@ -15,7 +15,12 @@ Do **not** cite `Q*` in product code or operator docs.
 
 ## Locked
 
-_(none yet)_
+| ID | Decision |
+|----|----------|
+| Q3 (scheme) | **Growth Versioning** B.R.G per product [ADR 023](../../../../design/decisions/023-growth-versioning.md) (salotz RFC 002). Tags `vB.R.G`; ldflags stamp `B.R.G` into `github.com/salotz/yerk/internal/version.Version`. |
+| Q3 (source) | **Git tag is canonical** for releases. Optional single in-tree `VERSION` only if a tool cannot read git; must agree with tag at cut. No multi-file hand bumps. Dev/default remains `0.0.0-dev` (or dirty derived form) until stamped. |
+
+Still open under Q3 implementation detail: whether release builds always require an exact tag vs allow `git describe`-style dirty strings for non-release artifacts.
 
 ---
 
@@ -25,4 +30,5 @@ Operator intent: install via tools like **mise**, not only `go build` from a
 clone. Keep ADR 007 (no host-private release fixtures in-repo).
 
 `internal/version` already exists for identity strings; this plan wires
-production stamping and distribution.
+production stamping and distribution. Product version **meanings** are ADR 023
+(not classic SemVer MAJOR.MINOR.PATCH).
