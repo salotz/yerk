@@ -18,9 +18,11 @@ Plan: [./ci-pipelines/](./ci-pipelines/).
 
 ### install-distribution
 
-Version stamp + GH Release + **packslip** on `v*` tags (ADR 024). **Still open:**
-first remote green + pin in README; multi-OS (Q2); `go install` (Q5); install
-how-to polish.
+Version stamp + GH Release + **packslip** on `v*` tags (ADR 024). `v0.0.1` live.
+**Still open:** multi-OS (Q2); `go install` (Q5); install how-to polish.
+**Todo:** when a **released** packslip CLI ships `packslip pin` / `verify --pin`
+(not in 1.4.0), run pin on a trusted yerk bundle and publish `ps1_…` in README
+(+ ADR 024 / development.md). Do not hand-derive pins for product docs.
 Plan: [./install-distribution/](./install-distribution/).
 
 ### sync-verbs-design
