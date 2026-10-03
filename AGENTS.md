@@ -7,6 +7,7 @@ This project follows the guidelines at https://github.com/salotz/agent-guideline
 - Prefer task-specific tools over shell.
 - Follow salotz RFC 22 (project layout), RFC 23/24 (host context), RFC 28 (PRJX).
 - Product versioning: Growth Versioning B.R.G (salotz RFC 002; [ADR 023](./design/decisions/023-growth-versioning.md)) — not classic SemVer meanings.
+- Releases: GitHub Actions + [packslip](https://packslip.dev/) signed manifest ([ADR 024](./design/decisions/024-packslip-releases.md)); keep signing in `.github/workflows/release.yml`.
 - Cache remote resources locally when possible.
 - Use compacted inlining for referenced standards.
 - Check `content/shared/summaries/` before fetching full external standards.

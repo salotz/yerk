@@ -24,19 +24,25 @@ Project declarations per
 
 ## Install
 
-**From source (dev):**
+### From source
 
 ```sh
 mise install && mise run build   # → .local/bin/yerk
 ```
 
-**Release binaries:** push an annotated tag `vB.R.G` (Growth Versioning,
-[ADR 023](./design/decisions/023-growth-versioning.md)); GitHub Actions publishes
-linux/amd64 assets on the [Releases](https://github.com/salotz/yerk/releases)
-page. Cut a tag with `mise run version-bump -- growth --tag` (see
-[contributing/development.md](./contributing/development.md)).
+### With mise (packslip backend)
 
-A mise/ubi install channel is not registered yet.
+```sh
+# mise 2026.9.2+
+mise use -g packslip:github.com/salotz/yerk
+```
+
+Releases are signed with GitHub Actions identity via [packslip](https://packslip.dev/) (`.github/workflows/release.yml`).
+
+### Manual download:
+
+GitHub [Releases](https://github.com/salotz/yerk/releases) ship `yerk-<B.R.G>-linux-x64.tar.gz` (and a bare `.bin`),
+plus `packslip.sigstore.json`.
 
 ## Configure
 

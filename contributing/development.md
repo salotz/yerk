@@ -82,7 +82,7 @@ an **annotated** tag on `HEAD` (refuses a dirty tree unless `--force`).
 | Workflow | Trigger | Does |
 | --- | --- | --- |
 | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | pull request; push to `main`/`master` | `go test`, `go vet`, stamped build |
-| [`.github/workflows/release.yml`](../.github/workflows/release.yml) | push tag `vB.R.G` | test + vet + linux/amd64 binary + tarball + `SHA256SUMS` → GitHub Release |
+| [`.github/workflows/release.yml`](../.github/workflows/release.yml) | push tag `vB.R.G` | test + vet + linux/x64 archive + checksums → GitHub Release, then **packslip** sign + upload `packslip.sigstore.json` |
 
 Local equivalents:
 
@@ -93,11 +93,36 @@ mise run build          # → .local/bin/yerk with ldflags
 
 Go pin in workflows must match `mise.toml` (`1.27.1`). Bump both together.
 
-Release cut after the tag is on the remote:
+### Release cut (tag → assets → packslip)
 
-1. `mise run version-bump -- growth --tag` (clean tree)
-2. `git push origin main` (if needed) and `git push origin vB.R.G`
-3. Actions **release** job publishes assets; download from the GitHub Release page
+1. Clean tree on the commit you want to ship; `mise run check`.
+2. `mise run version-bump -- growth --tag` (or `regression` / `breakage`).
+3. `git push origin main` (if needed) and `git push origin vB.R.G`.
+4. Workflow **release**:
+   - Builds `yerk-<ver>-linux-x64` (CGO off), packs `yerk-<ver>-linux-x64.tar.gz`
+     (archive member `yerk`), writes `SHA256SUMS`.
+   - Creates/updates the GitHub Release with those assets.
+   - Runs [`jdx/packslip@v1`](https://packslip.dev/docs/publishing/) on the
+     **tarball only** (`bin: yerk`, project `github.com/salotz/yerk`), attests
+     files, signs with the workflow OIDC identity, uploads
+     `packslip.sigstore.json`.
+5. **After the first successful release**, download the bundle and record the
+   signer pin for install docs / README:
+
+   ```sh
+   curl -fsSLO "https://github.com/salotz/yerk/releases/download/vB.R.G/packslip.sigstore.json"
+   packslip pin packslip.sigstore.json   # → ps1_… ; publish beside install instructions
+   ```
+
+6. Operators install with mise:
+
+   ```sh
+   mise use -g packslip:github.com/salotz/yerk
+   ```
+
+**Do not** move packslip signing to a different workflow file without planning
+a consumer trust reset (packslip pins the **workflow path**
+`.github/workflows/release.yml`).
 
 ## Test and check
 

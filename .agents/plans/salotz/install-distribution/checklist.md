@@ -11,11 +11,13 @@
 - [x] `mise run build` (and release build) stamps `internal/version` via `.tasks/build-yerk`
 - [x] Dev builds default `0.0.0-dev`; tagged/YERK_VERSION builds stamp B.R.G
 
-## Phase 1b — Release CI (partial channel)
+## Phase 1b — Release CI + packslip
 
-- [x] `.github/workflows/release.yml` on `vB.R.G` → GH Release linux/amd64 + checksums
+- [x] `.github/workflows/release.yml` on `vB.R.G` → GH Release linux-x64 + checksums
+- [x] packslip step (`jdx/packslip@v1`, ADR 024)
 - [ ] First remote tag run green (operator)
-- [ ] mise/ubi (or other) install channel still open (Q1)
+- [ ] `packslip pin` fingerprint published in README after first release
+- [ ] Optional multi-OS (Q2) / `go install` (Q5)
 
 ## Phase 2 — Artifacts + channel
 

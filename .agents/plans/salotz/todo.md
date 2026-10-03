@@ -18,8 +18,9 @@ Plan: [./ci-pipelines/](./ci-pipelines/).
 
 ### install-distribution
 
-Version stamp + GH Release on `v*` tags shipped (release.yml). **Still open:**
-mise/other install channel (Q1), multi-OS (Q2), `go install` (Q5), install how-to.
+Version stamp + GH Release + **packslip** on `v*` tags (ADR 024). **Still open:**
+first remote green + pin in README; multi-OS (Q2); `go install` (Q5); install
+how-to polish.
 Plan: [./install-distribution/](./install-distribution/).
 
 ### sync-verbs-design

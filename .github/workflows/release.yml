@@ -1,6 +1,9 @@
 # Release pipeline: on vB.R.G tags (Growth Versioning, ADR 023).
-# Builds stamped linux/amd64 binary, checksum, GitHub Release assets.
-# Install channel registration (mise/ubi/…) is later install-distribution work.
+# Builds stamped linux/amd64 binary, checksums, GitHub Release assets, then a
+# signed packslip bundle (https://packslip.dev/) for mise and other installers.
+#
+# Signer: this workflow file only (consumers pin workflow path). Do not move
+# packslip signing to a different workflow without a consumer trust reset.
 
 name: release
 
@@ -11,10 +14,12 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   release:
-    name: build-and-publish
+    name: build-publish-packslip
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -36,12 +41,16 @@ jobs:
               exit 1
               ;;
           esac
-          # reject prerelease / extra suffixes
           case "$ver" in
-            *[!0-9.]* | *..* | *.*.*.*) echo "error: invalid B.R.G ${ver}" >&2; exit 1 ;;
+            *[!0-9.]* | *..* | *.*.*.*)
+              echo "error: invalid B.R.G ${ver}" >&2
+              exit 1
+              ;;
           esac
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "version=${ver}" >> "$GITHUB_OUTPUT"
+          # packslip / common CLI layout (linux-x64, not GOARCH amd64 spelling)
+          echo "artifact_stem=yerk-${ver}-linux-x64" >> "$GITHUB_OUTPUT"
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -55,7 +64,7 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      - name: Build linux/amd64
+      - name: Build linux/amd64 archive
         env:
           YERK_VERSION: ${{ steps.ver.outputs.version }}
           YERK_COMMIT: ${{ github.sha }}
@@ -63,23 +72,22 @@ jobs:
         run: |
           set -eu
           mkdir -p dist
-          # short commit for stamp
           export YERK_COMMIT="$(printf '%s' "$YERK_COMMIT" | cut -c1-7)"
+          stem="${{ steps.ver.outputs.artifact_stem }}"
           GOOS=linux GOARCH=amd64 \
-            sh .tasks/build-yerk "dist/yerk_${{ steps.ver.outputs.version }}_linux_amd64"
-          # stable name inside the tarball
-          cp "dist/yerk_${{ steps.ver.outputs.version }}_linux_amd64" dist/yerk
-          tar -C dist -czf "dist/yerk_${{ steps.ver.outputs.version }}_linux_amd64.tar.gz" yerk
+            sh .tasks/build-yerk "dist/${stem}.bin"
+          # Archive root = bare `yerk` (Go CLI packslip recipe).
+          cp "dist/${stem}.bin" dist/yerk
+          tar -C dist -czf "dist/${stem}.tar.gz" yerk
           rm -f dist/yerk
           (
             cd dist
-            sha256sum "yerk_${{ steps.ver.outputs.version }}_linux_amd64" \
-              "yerk_${{ steps.ver.outputs.version }}_linux_amd64.tar.gz" \
-              > "yerk_${{ steps.ver.outputs.version }}_SHA256SUMS"
+            sha256sum "${stem}.bin" "${stem}.tar.gz" \
+              > "yerk-${{ steps.ver.outputs.version }}_SHA256SUMS"
           )
-          ./dist/yerk_${{ steps.ver.outputs.version }}_linux_amd64 version
+          "./dist/${stem}.bin" version
 
-      - name: Publish GitHub Release
+      - name: Publish GitHub Release assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
@@ -87,6 +95,20 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
-            dist/yerk_${{ steps.ver.outputs.version }}_linux_amd64
-            dist/yerk_${{ steps.ver.outputs.version }}_linux_amd64.tar.gz
-            dist/yerk_${{ steps.ver.outputs.version }}_SHA256SUMS
+            dist/${{ steps.ver.outputs.artifact_stem }}.bin
+            dist/${{ steps.ver.outputs.artifact_stem }}.tar.gz
+            dist/yerk-${{ steps.ver.outputs.version }}_SHA256SUMS
+
+      - name: Sign packslip and upload bundle
+        uses: jdx/packslip@v1
+        id: packslip
+        with:
+          # Only the installable archive (not the bare .bin or checksum file).
+          artifacts: dist/${{ steps.ver.outputs.artifact_stem }}.tar.gz
+          bin: yerk
+          tag: ${{ steps.ver.outputs.tag }}
+          version: ${{ steps.ver.outputs.version }}
+          project: github.com/salotz/yerk
+          # Public repo: attest + link provenance. Private non-GHEC would need false.
+          attest: true
+          upload: true
