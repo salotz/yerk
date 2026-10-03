@@ -66,9 +66,10 @@ shell activation.
   `context` / `context dir`, `state update`, `catalog`, `envvars`, `version`.
   Project args accept bare
   id / short unique name / `yerk://…` (ADR 012; package `internal/id`).
-  `domain` is required on every catalog project. `get`/`lookup` return
-  project or replica info (placement + paths + presence); `--output json`
-  (ADR 015). `config resolve <project-id>` dumps ordered placement
+  `domain` is required on every catalog project. `get` returns project or
+  replica info (placement + paths + presence); `lookup` defaults to the
+  canonical `yerk://` URI only (full resource via `--output json` or
+  `get <uri>`; ADR 015). `config resolve <project-id>` dumps ordered placement
   contributions + effective style (ADR 013); missing state.json is not
   listed under files. `state update` rebinds host project state from
   ambient (or `--workspace-style`); creates or overwrites bindings (unlike
@@ -76,7 +77,7 @@ shell activation.
   `workspace ensure` creates the project workspace directory only (not a
   replica leaf); requires project ids or `--all` (ADR 009). `materialize`
   (renamed from `clone`; no alias) supports single project or bulk
-  `--all` / `--tag` (XOR with names). `replica create` spins a session
+  `--all` / `--tag` / `--domain` (XOR with names; ADR 022). `replica create` spins a session
   replica via `worktree` (default; main must be present) or `clone`
   method (`--method` / catalog `replica_method`; ADR 016); refuse if dest
   present. Catalog root `tags = […]` is a closed vocabulary; project

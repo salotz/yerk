@@ -18,7 +18,7 @@ Materialize on-disk replica(s) for cataloged project(s) with `yerk materialize`
 
 1. Confirm resolve path: `yerk path <project-id> <replica>` (workspace:
    `yerk path <project-id>`)
-2. Optional: `yerk workspace ensure <project-id>` (or `--all` / `--tag`) for workspace dirs
+2. Optional: `yerk workspace ensure <project-id>` (or `--all` / `--tag` / `--domain`) for workspace dirs
 3. Materialize one project (default replica, or name it):
 
    ```sh
@@ -35,11 +35,13 @@ Materialize on-disk replica(s) for cataloged project(s) with `yerk materialize`
 
    ```sh
    yerk materialize --tag devel
+   yerk materialize --domain personal
    yerk materialize --all
    ```
 
    - `--tag` must be in the catalog root `tags` list
-   - Empty tag match or empty catalog with `--all` → error
+   - `--domain` matches catalog identity domain (not closed vocabulary)
+   - Empty tag/domain match or empty catalog with `--all` → error
    - Optional `--replica <name>` applies the same distinguisher to every
      selected project; otherwise each project uses its own default
 

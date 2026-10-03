@@ -139,6 +139,7 @@ func newVersionCmd(streams IO) *cobra.Command {
 func newStatusCmd(streams IO) *cobra.Command {
 	var (
 		tagFilter    string
+		domainFilter string
 		presenceOnly bool
 		network      bool
 		gitCompat    bool // deprecated alias; ignored when presence-only is set
@@ -149,10 +150,11 @@ func newStatusCmd(streams IO) *cobra.Command {
 		Short: "Show project or replica presence and change status",
 		Long: withEnv(`Show status for catalog projects (default) or a single project/replica.
 
-  yerk status                         → all projects (or --tag)
+  yerk status                         → all projects (or --tag / --domain)
   yerk status <project>               → one project
   yerk status <project> <replica>     → one replica checkout
   yerk status --tag <name>            → projects with declared tag
+  yerk status --domain <name>         → projects in catalog domain
 
 Project rows emphasize the project workspace path and summarize the default
 replica (presence/change). There is no REPLICA column on the project view;
@@ -166,8 +168,9 @@ default branch when default_replica is unset (otherwise catalog override or
 fallback "main"). With --presence-only and no --network, default branch is
 catalog override or "main" only (no ls-remote).
 
---tag must appear in the catalog's top-level tags list. Same selection model
-as workspace ensure and materialize (names | --all | --tag).
+--tag must appear in the catalog's top-level tags list. --domain matches
+catalog project.domain (not a closed vocabulary). Same selection model as
+workspace ensure and materialize (names | --all | --tag | --domain).
 
 Default output is a human table (or single-project detail). Pass --output
 json|yaml for api resources; --output table forces the human table layout.`, "status"),
@@ -176,8 +179,20 @@ json|yaml for api resources; --output table forces the human table layout.`, "st
 			if err := validateOutputFlag(output); err != nil {
 				return err
 			}
-			if tagFilter != "" && len(args) > 0 {
-				return errors.New("status: pass --tag or project args, not both")
+			tagFilter = strings.TrimSpace(tagFilter)
+			domainFilter = strings.TrimSpace(domainFilter)
+			nFilter := 0
+			if tagFilter != "" {
+				nFilter++
+			}
+			if domainFilter != "" {
+				nFilter++
+			}
+			if len(args) > 0 {
+				nFilter++
+			}
+			if nFilter > 1 {
+				return errors.New("status: pass --tag, --domain, or project args, not a combination")
 			}
 			// Change on by default; --presence-only opts out. Legacy --git is
 			// accepted as a no-op so old scripts keep working.
@@ -237,7 +252,7 @@ json|yaml for api resources; --output table forces the human table layout.`, "st
 				return printProjectStatusDetailOutput(streams.Out, rows[0], withGit, output)
 			}
 
-			// Project list (all or --tag)
+			// Project list (all, --tag, or --domain)
 			var projects []config.Project
 			switch {
 			case tagFilter != "":
@@ -248,12 +263,24 @@ json|yaml for api resources; --output table forces the human table layout.`, "st
 				if !structured {
 					fmt.Fprintf(streams.Out, "filter.tag=%s\n", tagFilter)
 				}
+			case domainFilter != "":
+				projects, err = cat.SelectByDomain(domainFilter)
+				if err != nil {
+					return err
+				}
+				if !structured {
+					fmt.Fprintf(streams.Out, "filter.domain=%s\n", domainFilter)
+				}
 			default:
 				projects = append([]config.Project(nil), cat.Projects...)
 			}
 			if len(projects) == 0 {
 				if tagFilter != "" {
 					fmt.Fprintf(streams.Out, "No projects matched tag %q.\n", tagFilter)
+					return nil
+				}
+				if domainFilter != "" {
+					fmt.Fprintf(streams.Out, "No projects matched domain %q.\n", domainFilter)
 					return nil
 				}
 				fmt.Fprintln(streams.Out, "No projects in catalog.")
@@ -268,6 +295,7 @@ json|yaml for api resources; --output table forces the human table layout.`, "st
 		},
 	}
 	cmd.Flags().StringVar(&tagFilter, "tag", "", "Only projects with this declared catalog tag")
+	cmd.Flags().StringVar(&domainFilter, "domain", "", "Only projects in this catalog domain")
 	cmd.Flags().BoolVar(&presenceOnly, "presence-only", false, "Skip git change probes (presence only)")
 	cmd.Flags().BoolVar(&network, "network", false, "Resolve default branch via git ls-remote")
 	cmd.Flags().StringVar(&output, "output", "", "Output format: json|yaml|table (default: human table/detail)")
@@ -722,6 +750,16 @@ func writeStructured(w io.Writer, output string, v any) error {
 }
 
 func printLookupResult(w io.Writer, result project.LookupResult, output string) error {
+	// Default / table: URI only. Structured formats keep the full resource.
+	// Human key/value detail is yerk get <uri>, not lookup.
+	if !isStructuredOutput(output) {
+		uri, err := lookupResultURI(result)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(w, uri)
+		return nil
+	}
 	if result.Replica != nil {
 		return printReplicaInfo(w, *result.Replica, output)
 	}
@@ -729,6 +767,24 @@ func printLookupResult(w io.Writer, result project.LookupResult, output string) 
 		return printProjectInfo(w, *result.Project, output)
 	}
 	return errors.New("lookup: empty result")
+}
+
+func lookupResultURI(result project.LookupResult) (string, error) {
+	if result.Replica != nil {
+		uri := strings.TrimSpace(result.Replica.URI)
+		if uri == "" {
+			return "", errors.New("lookup: replica resource missing uri")
+		}
+		return uri, nil
+	}
+	if result.Project != nil {
+		uri := strings.TrimSpace(result.Project.URI)
+		if uri == "" {
+			return "", errors.New("lookup: project resource missing uri")
+		}
+		return uri, nil
+	}
+	return "", errors.New("lookup: empty result")
 }
 
 func printProjectInfo(w io.Writer, info api.ProjectInfo, output string) error {
@@ -795,7 +851,8 @@ checkouts — use yerk materialize for that.
 
   yerk workspace ensure <project-id>...   mkdir named project workspace dirs
   yerk workspace ensure --all             mkdir every catalog project workspace
-  yerk workspace ensure --tag <name>      mkdir workspaces for projects with tag`, "workspace"),
+  yerk workspace ensure --tag <name>      mkdir workspaces for projects with tag
+  yerk workspace ensure --domain <name>   mkdir workspaces for projects in domain`, "workspace"),
 		RunE: requireSubcommand,
 	}
 	root.AddCommand(newWorkspaceEnsureCmd(streams))
@@ -804,9 +861,10 @@ checkouts — use yerk materialize for that.
 
 func newWorkspaceEnsureCmd(streams IO) *cobra.Command {
 	var (
-		all       bool
-		tagFilter string
-		styleFlag string
+		all          bool
+		tagFilter    string
+		domainFilter string
+		styleFlag    string
 	)
 	cmd := &cobra.Command{
 		Use:   "ensure [project...]",
@@ -824,10 +882,12 @@ initialized projects are a state no-op.
 Bulk (opt-in; mutually exclusive selectors):
   yerk workspace ensure --all
   yerk workspace ensure --tag <name>
+  yerk workspace ensure --domain <name>
 
-Bare ensure with no names and no --all/--tag is an error (bulk mkdir is opt-in).
---tag must be a declared catalog tag. Unknown tags error. A declared tag with
-zero matching projects is an error for ensure (empty mutate selection).
+Bare ensure with no names and no --all/--tag/--domain is an error (bulk mkdir
+is opt-in). --tag must be a declared catalog tag. Unknown tags error.
+--domain matches catalog project.domain (not closed vocabulary). Empty match
+is an error for ensure (empty mutate selection).
 
 --workspace-style sets an explicit style for this invocation; if it contradicts
 bound state, ensure errors (no silent rebind).
@@ -845,7 +905,7 @@ See also: yerk path <project>, yerk materialize <project>.`, "workspace ensure")
 			if err != nil {
 				return err
 			}
-			projects, err := resolveBulkProjectSelection(cat, args, all, tagFilter, "workspace ensure")
+			projects, err := resolveBulkProjectSelection(cat, args, all, tagFilter, domainFilter, "workspace ensure")
 			if err != nil {
 				return err
 			}
@@ -873,17 +933,19 @@ See also: yerk path <project>, yerk materialize <project>.`, "workspace ensure")
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "Ensure every project workspace in the catalog")
 	cmd.Flags().StringVar(&tagFilter, "tag", "", "Ensure every project with this declared catalog tag")
+	cmd.Flags().StringVar(&domainFilter, "domain", "", "Ensure every project in this catalog domain")
 	cmd.Flags().StringVar(&styleFlag, "workspace-style", "", "Explicit workspace style (errors if contradicts bound state)")
 	return cmd
 }
 
 func newMaterializeCmd(streams IO) *cobra.Command {
 	var (
-		replicaFlag string
-		tagFilter   string
-		all         bool
-		network     bool
-		styleFlag   string
+		replicaFlag  string
+		tagFilter    string
+		domainFilter string
+		all          bool
+		network      bool
+		styleFlag    string
 	)
 	cmd := &cobra.Command{
 		Use:   "materialize [project [replica]]",
@@ -901,10 +963,11 @@ Single project (id forms: short unique name, domain/name, yerk://…):
 Bulk (opt-in; mutually exclusive selectors):
   yerk materialize --all
   yerk materialize --tag <name>
+  yerk materialize --domain <name>
 
 Bulk materializes each selected project's default replica unless --replica is set
 (same distinguisher applied to every selected project). Bare materialize with no
-names and no --all/--tag is an error.
+names and no --all/--tag/--domain is an error.
 
 If the destination is already a usable git checkout (presence=present), materialize
 skips git and reports that the replica is already present (still prints the
@@ -916,9 +979,9 @@ runs git clone (optionally --branch). When replica is omitted per project,
 resolves the remote default branch via git ls-remote --symref (then catalog
 default_replica / "main").
 
---tag must be a declared catalog tag. Unknown tags error. A declared tag
-with zero matching projects is an error for materialize (empty mutate selection).
---all with an empty catalog is an error.
+--tag must be a declared catalog tag. Unknown tags error. --domain matches
+catalog project.domain (not closed vocabulary). Empty match is an error for
+materialize (empty mutate selection). --all with an empty catalog is an error.
 
 Requires git on PATH.`, "materialize"),
 		Args: cobra.MaximumNArgs(2),
@@ -931,7 +994,7 @@ Requires git on PATH.`, "materialize"),
 			if err != nil {
 				return err
 			}
-			projects, sharedReplica, err := resolveMaterializeSelection(cat, args, all, tagFilter, replicaFlag)
+			projects, sharedReplica, err := resolveMaterializeSelection(cat, args, all, tagFilter, domainFilter, replicaFlag)
 			if err != nil {
 				return err
 			}
@@ -966,6 +1029,7 @@ Requires git on PATH.`, "materialize"),
 	}
 	cmd.Flags().StringVar(&replicaFlag, "replica", "", "Replica distinguisher / branch (default: per-project remote HEAD)")
 	cmd.Flags().StringVar(&tagFilter, "tag", "", "Materialize every project with this declared catalog tag")
+	cmd.Flags().StringVar(&domainFilter, "domain", "", "Materialize every project in this catalog domain")
 	cmd.Flags().BoolVar(&all, "all", false, "Materialize every project in the catalog")
 	cmd.Flags().BoolVar(&network, "network", true, "Resolve default branch via git ls-remote when replica omitted")
 	cmd.Flags().StringVar(&styleFlag, "workspace-style", "", "Explicit workspace style (errors if contradicts bound state)")
@@ -1019,19 +1083,20 @@ func materializeOne(ctx context.Context, streams IO, res project.Resolver, git g
 }
 
 // resolveMaterializeSelection picks projects and an optional shared replica name.
-// Modes (XOR): single project + optional replica args, --all, or --tag.
+// Modes (XOR): single project + optional replica args, --all, --tag, or --domain.
 // Mutate empty selection is an error.
-func resolveMaterializeSelection(cat config.Catalog, args []string, all bool, tag, replicaFlag string) ([]config.Project, string, error) {
+func resolveMaterializeSelection(cat config.Catalog, args []string, all bool, tag, domain, replicaFlag string) ([]config.Project, string, error) {
 	replicaFlag = strings.TrimSpace(replicaFlag)
 	tag = strings.TrimSpace(tag)
+	domain = strings.TrimSpace(domain)
 
 	// Named args may include an optional replica distinguisher (max 2).
-	if !all && tag == "" {
+	if !all && tag == "" && domain == "" {
 		if len(args) == 0 {
-			return nil, "", errors.New("materialize: name a project, or pass --all or --tag")
+			return nil, "", errors.New("materialize: name a project, or pass --all, --tag, or --domain")
 		}
 		if len(args) > 2 {
-			return nil, "", errors.New("materialize: too many arguments (use --all or --tag for bulk)")
+			return nil, "", errors.New("materialize: too many arguments (use --all, --tag, or --domain for bulk)")
 		}
 		p, ref, err := resolveProjectArgs(cat, args)
 		if err != nil {
@@ -1047,7 +1112,7 @@ func resolveMaterializeSelection(cat config.Catalog, args []string, all bool, ta
 		return []config.Project{p}, replica, nil
 	}
 
-	projects, err := resolveBulkProjectSelection(cat, args, all, tag, "materialize")
+	projects, err := resolveBulkProjectSelection(cat, args, all, tag, domain, "materialize")
 	if err != nil {
 		return nil, "", err
 	}
@@ -1632,10 +1697,11 @@ func requireSubcommand(cmd *cobra.Command, args []string) error {
 }
 
 // resolveBulkProjectSelection picks projects for mutate bulk ops.
-// Modes (XOR): project name args, --all, or --tag. Empty selection is an error.
+// Modes (XOR): project name args, --all, --tag, or --domain. Empty selection is an error.
 // verb is used in error messages (e.g. "workspace ensure", "materialize").
-func resolveBulkProjectSelection(cat config.Catalog, args []string, all bool, tag, verb string) ([]config.Project, error) {
+func resolveBulkProjectSelection(cat config.Catalog, args []string, all bool, tag, domain, verb string) ([]config.Project, error) {
 	tag = strings.TrimSpace(tag)
+	domain = strings.TrimSpace(domain)
 	nSel := 0
 	if all {
 		nSel++
@@ -1643,14 +1709,17 @@ func resolveBulkProjectSelection(cat config.Catalog, args []string, all bool, ta
 	if tag != "" {
 		nSel++
 	}
+	if domain != "" {
+		nSel++
+	}
 	if len(args) > 0 {
 		nSel++
 	}
 	if nSel > 1 {
-		return nil, fmt.Errorf("%s: pass project args, --all, or --tag, not a combination", verb)
+		return nil, fmt.Errorf("%s: pass project args, --all, --tag, or --domain, not a combination", verb)
 	}
 	if nSel == 0 {
-		return nil, fmt.Errorf("%s: name one or more projects, or pass --all or --tag", verb)
+		return nil, fmt.Errorf("%s: name one or more projects, or pass --all, --tag, or --domain", verb)
 	}
 	if all {
 		return selectProjects(cat, nil, true)
@@ -1662,6 +1731,16 @@ func resolveBulkProjectSelection(cat config.Catalog, args []string, all bool, ta
 		}
 		if len(projects) == 0 {
 			return nil, fmt.Errorf("%s: no projects matched tag %q", verb, tag)
+		}
+		return projects, nil
+	}
+	if domain != "" {
+		projects, err := cat.SelectByDomain(domain)
+		if err != nil {
+			return nil, err
+		}
+		if len(projects) == 0 {
+			return nil, fmt.Errorf("%s: no projects matched domain %q", verb, domain)
 		}
 		return projects, nil
 	}

@@ -70,10 +70,10 @@ presence scan.
    Single project → one `ProjectStatus` document; multi-project → a list.
    `--output table` keeps the human table/detail layout.
 
-7. Read **presence** vs **change** without conflating them: change is only
+8. Read **presence** vs **change** without conflating them: change is only
    meaningful when presence is `present` (or overall has present replicas).
 
-8. Read change flags as a **bag**, not a single enum. Common patterns:
+9. Read change flags as a **bag**, not a single enum. Common patterns:
 
    | CHANGE | Rough meaning |
    | --- | --- |

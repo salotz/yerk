@@ -247,6 +247,7 @@ ref, not renaming `no-upstream` to `unpushed` alone.
 | `yerk status` / `yerk status <project>` | **ProjectStatus** — workspace path + default-replica presence/change summary |
 | `yerk status <project> <replica>` | **ReplicaStatus** — checkout path, presence, change, branch |
 | `yerk status --tag <name>` | Project list filtered by declared catalog tag |
+| `yerk status --domain <name>` | Project list filtered by catalog domain |
 | `yerk status --presence-only` | Skip change probes |
 
 Project table: no `REPLICA` column; `PATH` is the **project workspace**.

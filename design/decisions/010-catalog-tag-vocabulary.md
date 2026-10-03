@@ -52,9 +52,10 @@ Bulk selection by tag uses the closed vocabulary:
   error. Declared tag with zero projects is an empty match (not an error).
   When filtering, status prints `filter.tag=<name>`.
 - `yerk materialize --tag <name>` — same declared-tag rule; empty match is an
-  **error** (mutate). Mutually exclusive with project args and `--all`.
-- Same `Catalog.SelectByTag` helper is the shared path for bulk ops
-  (`workspace ensure --tag` still pending).
+  **error** (mutate). Mutually exclusive with project args, `--all`, and
+  `--domain` (ADR 022).
+- Same `Catalog.SelectByTag` helper is the shared path for tag bulk ops
+  (`workspace ensure --tag` included). Domain bulk is separate (ADR 022).
 
 `yerk catalog show` prints the declared vocabulary, then the project table
 (TAGS column still shows each project’s tags).

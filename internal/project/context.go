@@ -32,7 +32,8 @@ func ToolContext() (api.ToolContext, error) {
 	out.Commands = []api.ContextCommand{
 		{Name: "status", Role: "presence + change; one project lists live replicas + overall"},
 		{Name: "path / resolve", Role: "print workspace or replica path"},
-		{Name: "get / lookup", Role: "one-resource info by id or path (--output json)"},
+		{Name: "get", Role: "one-resource info by id (--output json)"},
+		{Name: "lookup", Role: "path → yerk:// URI; --output json for full resource"},
 		{Name: "config resolve", Role: "placement contribution stack for a project"},
 		{Name: "state update", Role: "rebind host project state from ambient"},
 		{Name: "workspace ensure", Role: "mkdir project workspace only"},
@@ -75,7 +76,7 @@ func ToolContext() (api.ToolContext, error) {
 		"Host paths: config.toml [domains] and optional [[projects]] (ADR 014)",
 		"Bootstrap: yerk workspace ensure <id>; yerk materialize <id>",
 		"Session: yerk replica create <id> <name> (main must exist for worktree)",
-		"Where am I: yerk context dir; detail: yerk get / yerk lookup --output json",
+		"Where am I: yerk context dir; path→id: yerk lookup; detail: yerk get <id> --output json",
 		"Why style X: yerk config resolve <project-id>",
 		"Full env docs: yerk help envvars; live: yerk envvars",
 	}
@@ -180,7 +181,7 @@ func (r Resolver) DirContext(ctx context.Context, projects []config.Project, pat
 	}
 
 	out.Notes = []string{
-		"Use yerk get / yerk lookup --output json for single-resource detail",
+		"Use yerk lookup for path→URI; yerk get <id> --output json for single-resource detail",
 		"Use yerk config resolve " + p.ID() + " for full contribution stack",
 		"Use yerk status " + p.ID() + " for full per-replica change table",
 	}

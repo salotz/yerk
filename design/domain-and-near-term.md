@@ -61,7 +61,7 @@ It speaks PRJX vocabulary; it does not redefine the PRJX spec.
 | Session replica spin-out | create replica | `yerk replica create <id> <replica>` (`--method worktree\|clone`; ADR 016) |
 | Workspace styles | layout path math | `workspace-dir`, `project-dir`, `name-tags` (+ optional main_dir/replica_dir; ADR 018) |
 | Read git state | probe change status | part of status (opt-out flag); not a separate default verb |
-| Universal read | get / lookup | `yerk get <id>`; `yerk lookup <path>`; `project|replica get|lookup`; `--output json` (ADR 015) |
+| Universal read | get / lookup | `yerk get <id>`; `yerk lookup <path>` → URI (default); full resource `--output json` (ADR 015) |
 | Explain placement | resolve config | `yerk config resolve <project-id>` (contribution stack; ADR 013) |
 | Agent context dump | context | `yerk context`; `yerk context dir [path]` (ADR 017) |
 | Sync | pull / push | later — **design semantics first** (no stub CLI) |
@@ -75,25 +75,29 @@ not use a top-level `clone` command (git still runs `git clone` under the hood).
 
 ### Project selection (bulk)
 
-Commands that act on **many** projects share one selection model (ADR 010):
+Commands that act on **many** projects share one selection model (ADR 010, ADR 022):
 
 | Selector | Meaning | Near-term |
 | --- | --- | --- |
-| (default / all catalog) | Every `[[projects]]` row | `yerk status` with no `--tag` |
-| `--tag <name>` | Projects that list declared tag `<name>` | `status --tag`; `materialize --tag` |
+| (default / all catalog) | Every `[[projects]]` row | `yerk status` with no filter |
+| `--tag <name>` | Projects that list declared tag `<name>` | `status --tag`; `materialize --tag`; `workspace ensure --tag` |
+| `--domain <name>` | Projects with catalog `domain == <name>` | `status --domain`; `materialize --domain`; `workspace ensure --domain` |
 | project id args | Explicit subset (ADR 012 forms) | `workspace ensure <id>…`, `materialize <id>` |
 | `--all` | Explicit full catalog (opt-in bulk mutate) | `workspace ensure --all`, `materialize --all` |
-| `--tag` | Declared catalog tag bulk mutate | `workspace ensure --tag`, `materialize --tag`, `status --tag` |
 
 Rules:
 
 - `<name>` for `--tag` must appear in catalog root `tags` (unknown → error).
-- Declared tag with zero projects → empty match (not an error) for **read** ops
-  (`status`); **mutate** ops (`materialize`) refuse empty selection.
-- For mutate commands that support bulk: project args, `--all`, and `--tag` are
-  mutually exclusive (one selector), including `workspace ensure` (ADR 009).
-- Implementation path: `Catalog.SelectByTag` + `resolveBulkProjectSelection` /
-  materialize selection helper.
+- `--domain` matches catalog identity domain (not a closed vocabulary; not
+  `[domains]` host roots).
+- Declared tag or domain with zero projects → empty match (not an error) for
+  **read** ops (`status`); **mutate** ops (`materialize`, `workspace ensure`)
+  refuse empty selection.
+- For mutate commands that support bulk: project args, `--all`, `--tag`, and
+  `--domain` are mutually exclusive (one selector), including
+  `workspace ensure` (ADR 009).
+- Implementation path: `Catalog.SelectByTag` / `SelectByDomain` +
+  `resolveBulkProjectSelection` / materialize selection helper.
 
 ---
 

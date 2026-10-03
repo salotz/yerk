@@ -25,3 +25,4 @@ Architecture decision records for `yerk`.
 | [019](./019-output-formats.md) | Shared `--output json\|yaml\|table` |
 | [020](./020-git-adapter-subprocess.md) | Git adapter stays subprocess (not go-git) |
 | [021](./021-mit-license.md) | MIT license |
+| [022](./022-domain-bulk-selection.md) | Domain bulk selection (`--domain`) |

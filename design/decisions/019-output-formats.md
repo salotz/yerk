@@ -26,11 +26,14 @@ Status remained table-only; agents still scraped or ran get repeatedly.
 Shared flag name: **`--output`**.
 
 | Value | Meaning |
-| --- | --- | 
-| omit / empty | Command default human layout (key/value or table) |
-| `table` | Same as human default (explicit) |
+| --- | --- |
+| omit / empty | Command default human layout (key/value, table, or **lookup URI line**) |
+| `table` | Same as that command’s human default (explicit) |
 | `json` | One indented JSON document (`apiVersion` / `kind` on resources) |
 | `yaml` | One YAML document; field names match `json` tags (ADR 011) |
+
+Lookup’s human default is the canonical `yerk://…` URI only (ADR 015); `get`
+keeps key/value. `table` on lookup stays URI-only.
 
 Unsupported values error. No TTY auto-json.
 

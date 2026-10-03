@@ -36,17 +36,19 @@ yerk project get personal/yerk
 yerk replica get personal/yerk main
 ```
 
-**Reverse lookup** (path → id + resource; walk-up under workspace/replica):
+**Reverse lookup** (path → URI by default; walk-up under workspace/replica):
 
 ```sh
-yerk lookup .
+yerk lookup .                    # → yerk://domain/name[/replica]
 yerk lookup /path/under/replica
 yerk project lookup /path/under/workspace
 yerk replica lookup /path/under/replica
+
+yerk get "$(yerk lookup .)"      # expand URI → full resource (human)
 ```
 
-Machine-readable: add `--output json` (single `ProjectInfo` or `ReplicaInfo`
-document, `apiVersion: yerk/v1`). See [ADR 015](../../design/decisions/015-get-and-lookup.md).
+Full resource from a path: `yerk lookup . --output json` (or yaml), or
+`yerk get <uri> --output json`. See [ADR 015](../../design/decisions/015-get-and-lookup.md).
 
 ## See also
 

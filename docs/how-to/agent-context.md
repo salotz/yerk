@@ -44,7 +44,8 @@ Give an AI agent or tool a **single structured dump** of yerk vocabulary and
    | Need | Command |
    | --- | --- |
    | One resource by id | `yerk get <id> --output json` |
-   | Path → id only | `yerk lookup <path> --output json` |
+   | Path → URI only | `yerk lookup <path>` |
+   | Path → full resource | `yerk lookup <path> --output json` |
    | Full placement stack | `yerk config resolve <project-id>` |
    | Full change / multi-replica | `yerk status <project-id> [--output json]` |
 

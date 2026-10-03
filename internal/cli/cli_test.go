@@ -1130,17 +1130,45 @@ tags = ["devel"]
 	if err := cli.Execute(context.Background(), streams, []string{"lookup", deep}); err != nil {
 		t.Fatalf("lookup: %v", err)
 	}
-	lu := out.String()
-	if !strings.Contains(lu, "kind:\tReplicaInfo") || !strings.Contains(lu, "matchedPath:\t"+deep) {
-		t.Fatalf("lookup deep:\n%s", lu)
+	lu := strings.TrimSpace(out.String())
+	if lu != "yerk://personal/yerk/main" {
+		t.Fatalf("lookup deep default URI:\ngot %q", lu)
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"lookup", deep, "--output", "json"}); err != nil {
+		t.Fatalf("lookup json: %v", err)
+	}
+	luJSON := out.String()
+	if !strings.Contains(luJSON, `"kind": "ReplicaInfo"`) || !strings.Contains(luJSON, `"uri": "yerk://personal/yerk/main"`) {
+		t.Fatalf("lookup json:\n%s", luJSON)
+	}
+	if !strings.Contains(luJSON, deep) {
+		t.Fatalf("lookup json matchedPath:\n%s", luJSON)
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"lookup", deep, "--output", "table"}); err != nil {
+		t.Fatalf("lookup table: %v", err)
+	}
+	if strings.TrimSpace(out.String()) != "yerk://personal/yerk/main" {
+		t.Fatalf("lookup table should stay URI-only:\n%s", out.String())
 	}
 
 	out.Reset()
 	if err := cli.Execute(context.Background(), streams, []string{"project", "lookup", deep}); err != nil {
 		t.Fatalf("project lookup: %v", err)
 	}
-	if !strings.Contains(out.String(), "kind:\tProjectInfo") {
-		t.Fatalf("project lookup:\n%s", out.String())
+	if strings.TrimSpace(out.String()) != "yerk://personal/yerk" {
+		t.Fatalf("project lookup URI:\n%s", out.String())
+	}
+
+	out.Reset()
+	if err := cli.Execute(context.Background(), streams, []string{"project", "lookup", deep, "--output", "json"}); err != nil {
+		t.Fatalf("project lookup json: %v", err)
+	}
+	if !strings.Contains(out.String(), `"kind": "ProjectInfo"`) {
+		t.Fatalf("project lookup json:\n%s", out.String())
 	}
 
 	out.Reset()
@@ -1526,8 +1554,12 @@ tags = ["work"]
 	}{
 		{"tag+name", []string{"workspace", "ensure", "--tag", "devel", "alpha"}, "not a combination"},
 		{"all+tag", []string{"workspace", "ensure", "--all", "--tag", "devel"}, "not a combination"},
+		{"domain+name", []string{"workspace", "ensure", "--domain", "personal", "alpha"}, "not a combination"},
+		{"all+domain", []string{"workspace", "ensure", "--all", "--domain", "personal"}, "not a combination"},
+		{"tag+domain", []string{"workspace", "ensure", "--tag", "devel", "--domain", "personal"}, "not a combination"},
 		{"unknown-tag", []string{"workspace", "ensure", "--tag", "nope"}, "unknown tag"},
 		{"empty-tag", []string{"workspace", "ensure", "--tag", "work"}, "no projects matched tag"},
+		{"empty-domain", []string{"workspace", "ensure", "--domain", "missing"}, "no projects matched domain"},
 	}
 	// empty-tag needs a declared tag with zero members — recreate catalog
 	catEmpty := []byte(`
@@ -1552,6 +1584,64 @@ tags = ["devel"]
 				t.Fatalf("got %v want substring %q", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestWorkspaceEnsureBulkDomain(t *testing.T) {
+	dir := t.TempDir()
+	personalRoot := filepath.Join(dir, "personal")
+	workRoot := filepath.Join(dir, "work")
+	alphaWS := filepath.Join(personalRoot, "devel", "alpha")
+	betaWS := filepath.Join(workRoot, "devel", "beta")
+	cfg := []byte(`[workspace]
+style = "workspace-dir"
+
+[[projects]]
+name = "alpha"
+domain = "personal"
+path = "` + alphaWS + `"
+
+[[projects]]
+name = "beta"
+domain = "work"
+path = "` + betaWS + `"
+`)
+	cat := []byte(`
+tags = ["devel"]
+
+[[projects]]
+name = "alpha"
+domain = "personal"
+remote = "git@example.com:a/alpha.git"
+tags = ["devel"]
+
+[[projects]]
+name = "beta"
+domain = "work"
+remote = "git@example.com:a/beta.git"
+tags = ["devel"]
+`)
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), cfg, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "catalog.toml"), cat, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	setYerkHostEnv(t, dir)
+
+	var out bytes.Buffer
+	streams := cli.IO{Out: &out, Err: &out}
+	if err := cli.Execute(context.Background(), streams, []string{"workspace", "ensure", "--domain", "personal"}); err != nil {
+		t.Fatalf("ensure --domain: %v\n%s", err, out.String())
+	}
+	if _, err := os.Stat(alphaWS); err != nil {
+		t.Fatalf("alpha workspace missing: %v", err)
+	}
+	if _, err := os.Stat(betaWS); !os.IsNotExist(err) {
+		t.Fatalf("beta should not be ensured by --domain personal")
+	}
+	if !strings.Contains(out.String(), alphaWS) {
+		t.Fatalf("ensure --domain out:\n%s", out.String())
 	}
 }
 

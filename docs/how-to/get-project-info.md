@@ -17,11 +17,18 @@ second argument) when you need replica info.
 
 ## Reverse (by path)
 
+Default `lookup` prints only the canonical URI (path → id). Expand with `get`
+when you need the full resource:
+
 ```sh
 yerk lookup .
+# → yerk://personal/yerk/main
+
 yerk lookup path/to/file/under/checkout
-yerk project lookup /path/under/workspace
-yerk replica lookup /path/under/replica
+yerk project lookup /path/under/workspace   # → yerk://personal/yerk
+yerk replica lookup /path/under/replica     # → yerk://personal/yerk/main
+
+yerk get "$(yerk lookup .)"                 # human key/value for that URI
 ```
 
 Any subdirectory under a known workspace or replica root matches (walk-up).
@@ -32,12 +39,13 @@ Any subdirectory under a known workspace or replica root matches (walk-up).
 ```sh
 yerk get personal/yerk --output json
 yerk get personal/yerk --output yaml
-yerk lookup . --output json
+yerk lookup . --output json                 # full ReplicaInfo / ProjectInfo
+yerk get "$(yerk lookup .)" --output json   # same via id
 ```
 
 Documents are `ProjectInfo` or `ReplicaInfo` with `apiVersion: yerk/v1`
-(ADR 015). `--output table` keeps the human key/value layout. Shared flag
-surface: ADR 019.
+(ADR 015). On `get`, `--output table` keeps the human key/value layout; on
+`lookup`, default/`table` stay URI-only. Shared flag surface: ADR 019.
 
 ## See also
 

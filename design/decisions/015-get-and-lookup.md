@@ -93,10 +93,11 @@ Business logic stays out of cobra `RunE` beyond flags, selection, and print.
 
 ## Consequences
 
-- Session managers can `yerk get` / `yerk lookup --output json` without scraping
+- Session managers can take `yerk lookup <path>` as a stable id string, then
+  `yerk get <uri> --output json` (or lookup `--output json`) without scraping
   tables.
 - `status` remains the multi-row / change-oriented view; get is one-resource
-  detail with placement.
+  detail with placement; lookup defaults to id only.
 - Phase 6 `context dir` should compose these helpers rather than reimplement
   walk-up.
 - JSON field names on info kinds should not churn casually (same discipline as

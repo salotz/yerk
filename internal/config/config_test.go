@@ -243,6 +243,52 @@ func TestFilterTag(t *testing.T) {
 	}
 }
 
+func TestFilterDomain(t *testing.T) {
+	t.Parallel()
+	cat := config.Catalog{
+		Projects: []config.Project{
+			{Name: "a", Domain: "personal"},
+			{Name: "b", Domain: "work"},
+			{Name: "c", Domain: "personal"},
+		},
+	}
+	got := cat.FilterDomain("personal")
+	if len(got) != 2 {
+		t.Fatalf("FilterDomain personal got %d", len(got))
+	}
+	got = cat.FilterDomain("work")
+	if len(got) != 1 || got[0].Name != "b" {
+		t.Fatalf("FilterDomain work: %+v", got)
+	}
+	got = cat.FilterDomain("missing")
+	if len(got) != 0 {
+		t.Fatalf("expected empty domain match, got %+v", got)
+	}
+	got = cat.FilterDomain("")
+	if len(got) != 3 {
+		t.Fatalf("empty domain should return all, got %d", len(got))
+	}
+
+	sel, err := cat.SelectByDomain("personal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sel) != 2 {
+		t.Fatalf("SelectByDomain got %d", len(sel))
+	}
+	_, err = cat.SelectByDomain("")
+	if err == nil {
+		t.Fatal("empty domain should error")
+	}
+	sel, err = cat.SelectByDomain("nope")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sel) != 0 {
+		t.Fatalf("unknown domain is empty match, got %+v", sel)
+	}
+}
+
 func TestCatalogValidateTags(t *testing.T) {
 	t.Parallel()
 

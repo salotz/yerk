@@ -327,3 +327,32 @@ func (c Catalog) SelectByTag(tag string) ([]Project, error) {
 	}
 	return c.FilterTag(tag), nil
 }
+
+// FilterDomain returns projects whose Domain equals domain (exact match after
+// trim). Empty domain returns a copy of all projects.
+func (c Catalog) FilterDomain(domain string) []Project {
+	domain = strings.TrimSpace(domain)
+	if domain == "" {
+		out := make([]Project, len(c.Projects))
+		copy(out, c.Projects)
+		return out
+	}
+	var out []Project
+	for _, p := range c.Projects {
+		if strings.TrimSpace(p.Domain) == domain {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// SelectByDomain returns projects in domain. Domain must be non-empty.
+// Domains are not a closed vocabulary (unlike tags); an empty match set is
+// not an error here (callers decide read vs mutate empty policy). ADR 022.
+func (c Catalog) SelectByDomain(domain string) ([]Project, error) {
+	domain = strings.TrimSpace(domain)
+	if domain == "" {
+		return nil, fmt.Errorf("domain required")
+	}
+	return c.FilterDomain(domain), nil
+}
