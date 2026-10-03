@@ -49,10 +49,18 @@ go build -o yerk ./cmd/yerk
 Product versions use **Growth Versioning** `B.R.G`
 ([ADR 023](../design/decisions/023-growth-versioning.md), salotz RFC 002)—not
 classic SemVer meanings. Release identity is a **git tag** `vB.R.G`; the binary
-stamp is `B.R.G` without the `v`. Untagged/dev builds keep `0.0.0-dev` until
-ldflags stamping is wired (install-distribution).
+stamp is `B.R.G` without the `v`.
 
-**Bump in practice** (helper under `.tasks/version-bump`):
+`mise run build` stamps via [`.tasks/build-yerk`](../.tasks/build-yerk) /
+[`.tasks/go-ldflags`](../.tasks/go-ldflags):
+
+| Situation | `Version` stamp |
+| --- | --- |
+| Untagged HEAD | `0.0.0-dev` |
+| HEAD is exact tag `vB.R.G` | `B.R.G` |
+| `YERK_VERSION=B.R.G` in env | that value (release CI) |
+
+**Bump in practice:**
 
 ```sh
 mise run version-show
@@ -61,7 +69,7 @@ mise run version-bump -- growth        # G+1  (aliases: g, patch)
 mise run version-bump -- regression    # R+1  (aliases: r, minor)
 mise run version-bump -- breakage      # B+1, G=0  (aliases: b, major)
 
-# cut a release on a clean HEAD:
+# cut a release on a clean HEAD, then push the tag:
 mise run version-bump -- growth --tag
 git push origin v0.0.1                 # or: … --tag --push
 ```
@@ -69,16 +77,27 @@ git push origin v0.0.1                 # or: … --tag --push
 Without `--tag`, the task only prints current → next. With `--tag` it creates
 an **annotated** tag on `HEAD` (refuses a dirty tree unless `--force`).
 
-**CI today:** there is no remote pipeline yet ([ci-pipelines](../.agents/plans/salotz/ci-pipelines/)
-plan). Pushing a tag does nothing automatic until a workflow listens for
-`v*` tags (release) or PR/main pushes (check). Checks need not run only on
-tags; release/publish jobs usually do.
+### Continuous integration (GitHub Actions)
 
-Manual ldflags (until `mise run build` stamps from git):
+| Workflow | Trigger | Does |
+| --- | --- | --- |
+| [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | pull request; push to `main`/`master` | `go test`, `go vet`, stamped build |
+| [`.github/workflows/release.yml`](../.github/workflows/release.yml) | push tag `vB.R.G` | test + vet + linux/amd64 binary + tarball + `SHA256SUMS` → GitHub Release |
+
+Local equivalents:
 
 ```sh
-go build -ldflags "-X github.com/salotz/yerk/internal/version.Version=0.1.0" -o yerk ./cmd/yerk
+mise run check          # test + vet
+mise run build          # → .local/bin/yerk with ldflags
 ```
+
+Go pin in workflows must match `mise.toml` (`1.27.1`). Bump both together.
+
+Release cut after the tag is on the remote:
+
+1. `mise run version-bump -- growth --tag` (clean tree)
+2. `git push origin main` (if needed) and `git push origin vB.R.G`
+3. Actions **release** job publishes assets; download from the GitHub Release page
 
 ## Test and check
 

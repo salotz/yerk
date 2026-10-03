@@ -8,8 +8,14 @@
 ## Phase 1 — Version identity
 
 - [x] Tag / version scheme documented (ADR 023; `mise run version-show` / `version-bump`)
-- [ ] `mise run build` (and release build) can stamp `internal/version` from tag
-- [ ] `yerk version` reflects stamp on tagged builds; dev builds still sensible
+- [x] `mise run build` (and release build) stamps `internal/version` via `.tasks/build-yerk`
+- [x] Dev builds default `0.0.0-dev`; tagged/YERK_VERSION builds stamp B.R.G
+
+## Phase 1b — Release CI (partial channel)
+
+- [x] `.github/workflows/release.yml` on `vB.R.G` → GH Release linux/amd64 + checksums
+- [ ] First remote tag run green (operator)
+- [ ] mise/ubi (or other) install channel still open (Q1)
 
 ## Phase 2 — Artifacts + channel
 

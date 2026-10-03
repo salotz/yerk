@@ -10,16 +10,16 @@ unrelated tracks into a single “mega plan.”
 
 ### ci-pipelines
 
-Remote CI matching local `mise run check` + build. **Next: Phase 0** lock host /
-triggers / jobs, then workflow.
+Check workflow shipped (`.github/workflows/ci.yml`). **Next:** confirm remote
+green, then close-out.
 Plan: [./ci-pipelines/](./ci-pipelines/).
 
 ## Backlog
 
 ### install-distribution
 
-Installable binaries for operators (mise and similar), version ldflags, release
-artifacts, install how-to. Soft pref: CI green first.
+Version stamp + GH Release on `v*` tags shipped (release.yml). **Still open:**
+mise/other install channel (Q1), multi-OS (Q2), `go install` (Q5), install how-to.
 Plan: [./install-distribution/](./install-distribution/).
 
 ### sync-verbs-design

@@ -1,0 +1,85 @@
+#!/usr/bin/env sh
+# Print go -ldflags for internal/version (ADR 023 Growth Versioning).
+# stdout: single line suitable for: go build -ldflags "$(sh .tasks/go-ldflags)"
+#
+# Version resolution (first match):
+#   1. YERK_VERSION env (B.R.G, optional leading v stripped)
+#   2. Exact annotated/lightweight tag on HEAD matching vB.R.G
+#   3. Default 0.0.0-dev
+#
+# Commit: YERK_COMMIT or git rev-parse --short HEAD or "unknown"
+# Date:   YERK_BUILD_DATE or UTC now (YYYY-MM-DDThh:mm:ssZ) or "unknown"
+
+set -eu
+
+pkg="${YERK_VERSION_PKG:-github.com/salotz/yerk/internal/version}"
+
+brg_ok() {
+	case "$1" in
+	'' | *[!0-9.]* | .* | *. | *..*) return 1 ;;
+	esac
+	b=${1%%.*}
+	rest=${1#*.}
+	case "$rest" in
+	*.*) ;;
+	*) return 1 ;;
+	esac
+	r=${rest%%.*}
+	g=${rest#*.}
+	case "$b$r$g" in
+	'' | *[!0-9]*) return 1 ;;
+	esac
+	case "$g" in
+	*.*) return 1 ;;
+	esac
+	return 0
+}
+
+strip_v() {
+	case "$1" in
+	v*) printf '%s\n' "${1#v}" ;;
+	*) printf '%s\n' "$1" ;;
+	esac
+}
+
+version="0.0.0-dev"
+if [ -n "${YERK_VERSION:-}" ]; then
+	v=$(strip_v "$YERK_VERSION")
+	if brg_ok "$v"; then
+		version=$v
+	else
+		printf 'error: YERK_VERSION must be B.R.G (got %s)\n' "$YERK_VERSION" >&2
+		exit 1
+	fi
+elif git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+	if t=$(git describe --tags --exact-match HEAD 2>/dev/null); then
+		v=$(strip_v "$t")
+		if brg_ok "$v"; then
+			version=$v
+		fi
+	fi
+fi
+
+commit="${YERK_COMMIT:-}"
+if [ -z "$commit" ]; then
+	if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+		commit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
+	else
+		commit=unknown
+	fi
+fi
+
+date="${YERK_BUILD_DATE:-}"
+if [ -z "$date" ]; then
+	date=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)
+fi
+
+# Escape for embedding in -X values (minimal: avoid double quotes in values).
+esc() {
+	printf '%s' "$1" | sed 's/[\\"]/\\&/g'
+}
+
+printf -- '-X %s.Version=%s -X %s.Commit=%s -X %s.BuildDate=%s\n' \
+	"$pkg" "$(esc "$version")" \
+	"$pkg" "$(esc "$commit")" \
+	"$pkg" "$(esc "$date")"

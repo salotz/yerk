@@ -16,9 +16,9 @@ Does **not** cover binary install channels or mise plugin packaging — that is
 
 | # | Phase | Status |
 |---|--------|--------|
-| 0 | Lock CI decisions | **next** |
-| 1 | Workflow: check + build | pending |
-| 2 | Docs + hygiene | pending |
+| 0 | Lock CI decisions | **done** |
+| 1 | Workflow: check + build | **done** (await remote green) |
+| 2 | Docs + hygiene | **done** |
 
 ## Protocol
 

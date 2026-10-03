@@ -1,0 +1,27 @@
+#!/usr/bin/env sh
+# Build yerk with version ldflags (ADR 023).
+#
+# Usage:
+#   sh .tasks/build-yerk [output-path]
+#   YERK_VERSION=1.2.3 sh .tasks/build-yerk /tmp/yerk
+#
+# Default output: .local/bin/yerk (dev) — override with arg or YERK_OUT.
+
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+cd "$root"
+
+out="${1:-${YERK_OUT:-.local/bin/yerk}}"
+mkdir -p "$(dirname "$out")"
+
+ldflags=$(sh "$root/.tasks/go-ldflags")
+# shellcheck disable=SC2086
+go build -ldflags "$ldflags" -o "$out" ./cmd/yerk
+
+if [ "${YERK_BUILD_QUIET:-}" != 1 ]; then
+	printf 'built %s\n' "$out" >&2
+	if [ -x "$out" ]; then
+		"$out" version >&2 || true
+	fi
+fi

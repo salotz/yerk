@@ -79,10 +79,13 @@ A new contributor can see how CI relates to `mise run check` / `build`.
 
 ## Success criteria
 
-- [ ] CI runs test + vet + build with pinned Go.
-- [ ] Triggers match locked policy.
-- [ ] Docs mention CI ↔ local tasks.
-- [ ] Plan folder removable at close.
+- [x] CI runs test + vet + build with pinned Go (`.github/workflows/ci.yml`).
+- [x] Triggers match locked policy (PR + push main/master).
+- [x] Docs mention CI ↔ local tasks.
+- [ ] Plan folder removable at close (after first remote green + operator OK).
+
+Release-on-tag is **out of this plan’s folder** but shipped alongside as
+`.github/workflows/release.yml` (see install-distribution).
 
 ---
 
@@ -94,5 +97,5 @@ A new contributor can see how CI relates to `mise run check` / `build`.
 
 ## Immediate next step
 
-**On go:** Phase 0 — lock Q1–Q5 (or accept defaults in decisions.md), then
-implement Phase 1 workflow.
+Push workflows to GitHub; confirm Actions green. Then close-out (delete plan
+folder) when operator confirms.

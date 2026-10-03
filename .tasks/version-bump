@@ -22,8 +22,8 @@ usage() {
 	cat <<'EOF'
 Growth Versioning helper (B.R.G — ADR 023 / salotz RFC 002)
 
-  mise run version:show
-  mise run version:bump -- <part> [--tag] [--push] [--force]
+  mise run version-show
+  mise run version-bump -- <part> [--tag] [--push] [--force]
 
 Parts:
   growth | g | patch       increment G (noteworthy growth)
@@ -40,9 +40,9 @@ Default (no --tag): print current and next versions; do not modify git.
   --force   allow --tag on a dirty worktree
 
 Examples:
-  mise run version:bump -- growth
-  mise run version:bump -- g --tag
-  mise run version:bump -- breakage --tag --push
+  mise run version-bump -- growth
+  mise run version-bump -- g --tag
+  mise run version-bump -- breakage --tag --push
 EOF
 }
 

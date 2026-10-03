@@ -22,7 +22,11 @@ description = "Download Go module deps after pins exist"
 run = "go mod download"
 
 [tasks.build]
-description = "Build yerk into .local/bin/yerk"
+description = "Build yerk into .local/bin/yerk (stamps version from tag/env)"
+run = "sh .tasks/build-yerk"
+
+[tasks."build:plain"]
+description = "Build without version ldflags (raw go build)"
 run = "mkdir -p .local/bin && go build -o .local/bin/yerk ./cmd/yerk"
 
 [tasks.install]

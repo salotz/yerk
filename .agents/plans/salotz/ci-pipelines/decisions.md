@@ -5,24 +5,18 @@ Do **not** cite `Q*` in product code or operator docs.
 
 ## Open queue
 
-| ID | Status | Topic |
-|----|--------|--------|
-| Q1 | open | CI host (GitHub Actions vs Forgejo/other) |
-| Q2 | open | Trigger policy (PR + main push vs main-only) |
-| Q3 | open | Job set: test + vet + build; fmt check yes/no |
-| Q4 | open | Go pin source (`mise.toml` version vs workflow-only) |
-| Q5 | open | OS matrix now (linux only vs multi-OS CI) |
+_(none — Q1–Q5 locked)_
 
 ## Locked
 
-_(none yet)_
+| ID | Decision |
+|----|----------|
+| Q1 | **GitHub Actions** (`.github/workflows/`) |
+| Q2 | **PR + push** to `main`/`master` for check CI; **not** tag-only |
+| Q3 | Jobs: `go test ./...`, `go vet ./...`, stamped `build` via `.tasks/build-yerk`. **No** fmt gate in CI for now |
+| Q4 | Go **1.27.1** in workflows (must match `mise.toml` `[tools].go`); document dual-maintain when bumping |
+| Q5 | **linux/amd64 only** (`ubuntu-latest`) for check CI |
 
----
+## Related (release, not this plan’s check job)
 
-## Defaults if operator is silent on go
-
-- GitHub Actions (repo already GitHub-shaped module path)
-- PR + push to default branch
-- `go test ./...`, `go vet ./...`, `go build ./cmd/yerk`
-- Go version aligned with `mise.toml` (`1.27.1` at plan spawn)
-- Linux amd64 only for CI (multi-OS belongs to install-distribution if needed)
+Release publish on `vB.R.G` tags lives in `.github/workflows/release.yml` (install-distribution + ADR 023). Check workflow: `ci.yml`.

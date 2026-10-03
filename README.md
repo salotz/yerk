@@ -24,8 +24,19 @@ Project declarations per
 
 ## Install
 
-Download a release binary and put it on your `PATH`.
-<!-- Binary release packaging is not shipped yet; use a local build until then. -->
+**From source (dev):**
+
+```sh
+mise install && mise run build   # → .local/bin/yerk
+```
+
+**Release binaries:** push an annotated tag `vB.R.G` (Growth Versioning,
+[ADR 023](./design/decisions/023-growth-versioning.md)); GitHub Actions publishes
+linux/amd64 assets on the [Releases](https://github.com/salotz/yerk/releases)
+page. Cut a tag with `mise run version-bump -- growth --tag` (see
+[contributing/development.md](./contributing/development.md)).
+
+A mise/ubi install channel is not registered yet.
 
 ## Configure
 
