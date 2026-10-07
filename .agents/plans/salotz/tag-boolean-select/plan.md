@@ -114,6 +114,13 @@ then a real expression engine (CEL or expr) may pay off. Design one activation
 context once and ADR it separately — do not grow the tag DSL into an accidental
 general language.
 
+**New demand (2026-10-07):** [status-filter-list-color](../status-filter-list-color/)
+wants `--status='dirty AND present'` using **this** engine. That is a second
+predicate kind (observed status atoms, not catalog tags). Convenience flags
+ship first without a parser; `--status=` stays unimplemented until this ADR
+picks an engine. If tags + status share one language, Q7 / CEL-vs-DSL should
+revisit “two non-tag kinds” — status is the second kind, still small/boolean.
+
 ---
 
 ## Phase 0 — Scope

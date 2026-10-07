@@ -39,11 +39,19 @@ Design-only ADR for `pull` / `push` (no CLI stubs). Carried from
 initial-feature-series Phase 9.
 Plan: [./sync-verbs-design/](./sync-verbs-design/).
 
+### status-filter-list-color
+
+Status UX: convenience filters (`--dirty`, `--present`, …), later `--status=`
+(same engine as tags; **deferred**), `yerk status --replicas` cross-project
+listing, TTY color on presence/change. **Next:** lock Q1–Q10, then ADR.
+Plan: [./status-filter-list-color/](./status-filter-list-color/).
+
 ### tag-boolean-select
 
 Design-only ADR for boolean / expression bulk select over catalog tags
 (e.g. `science AND NOT deprecated`). Lean: small DSL or flags first; CEL
-deferred unless predicates grow past tags. No CLI stubs.
+deferred unless predicates grow past tags. No CLI stubs. Status atoms
+(`--status=`) wait on this engine ([status-filter-list-color](./status-filter-list-color/)).
 Plan: [./tag-boolean-select/](./tag-boolean-select/).
 
 ### parallel-change-probes
