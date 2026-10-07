@@ -31,6 +31,13 @@ Design-only ADR for `pull` / `push` (no CLI stubs). Carried from
 initial-feature-series Phase 9.
 Plan: [./sync-verbs-design/](./sync-verbs-design/).
 
+### tag-boolean-select
+
+Design-only ADR for boolean / expression bulk select over catalog tags
+(e.g. `science AND NOT deprecated`). Lean: small DSL or flags first; CEL
+deferred unless predicates grow past tags. No CLI stubs.
+Plan: [./tag-boolean-select/](./tag-boolean-select/).
+
 ### parallel-change-probes
 
 Parallelize status git change probes (limit, stable order, fake adapter tests).
