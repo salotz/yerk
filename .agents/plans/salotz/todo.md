@@ -16,6 +16,14 @@ Plan: [./ci-pipelines/](./ci-pipelines/).
 
 ## Backlog
 
+### materialize-dwim
+
+Make `yerk materialize` the DWIM / declarative replica-ensure verb: worktree
+when main is present; independent clone only behind a hurdle. Incident:
+`materialize … md-next-workflow` cloned LFS instead of worktreeing existing
+`darpa-nodes/main`. **Next:** lock Q1–Q8, then ADR 025.
+Plan: [./materialize-dwim/](./materialize-dwim/).
+
 ### install-distribution
 
 Version stamp + GH Release + **packslip** on `v*` tags (ADR 024). `v0.0.1` live.
