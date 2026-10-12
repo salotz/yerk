@@ -14,6 +14,13 @@ Check workflow shipped (`.github/workflows/ci.yml`). **Next:** confirm remote
 green, then close-out.
 Plan: [./ci-pipelines/](./ci-pipelines/).
 
+### host-local-staging
+
+Design-only: apply host-local files (DVC `config.local`, etc.) into workspaces
+and replicas; host identity; lifecycle vs `ensure`; **git-config locals**
+(LFS skip-smudge). **Next:** lock Q1–Q12 in decisions.md, then ADR.
+Plan: [./host-local-staging/](./host-local-staging/).
+
 ## Backlog
 
 ### materialize-dwim

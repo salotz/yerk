@@ -57,6 +57,14 @@ each replica on checkout from:
 - project workspace `.local` trees (RFC 26 style), and/or
 - `~/.config/yerk/projects/<project>/locals/…`
 
+### Git LFS skip-smudge
+
+Some LFS remotes should not smudge on every checkout on this host.
+That is `git lfs install --local --skip-smudge` (shared `.git/config`,
+all worktrees), not a file copy into the replica. Operator override is
+still `git lfs pull --include=…`. Host `[[projects]]` knob, not catalog.
+See idea note (Git LFS skip-smudge) and plan `host-local-staging`.
+
 ## MVP (first milestone)
 
 1. Config file: register projects by name, remote URI, destination, tags

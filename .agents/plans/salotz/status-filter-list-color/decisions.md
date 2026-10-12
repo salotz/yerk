@@ -6,18 +6,18 @@ Do **not** cite `Q*` in product code.
 
 ## Open queue
 
-| ID | Status | Topic |
-|----|--------|--------|
-| Q1 | proposed | v1 convenience flag set |
-| Q2 | proposed | Combine semantics (AND vs OR vs XOR) |
-| Q3 | proposed | Filter grain: project overall vs replica rows |
-| Q4 | proposed | `--status=` timing / share tag DSL |
-| Q5 | proposed | Cross-project replica listing CLI shape |
-| Q6 | proposed | Color: auto TTY, palette, deps, `--color` |
-| Q7 | proposed | `--presence-only` vs change filters |
-| Q8 | proposed | Empty match, preamble, structured output |
-| Q9 | proposed | `--present` / `--missing` on **project** overall (all-present vs any) |
-| Q10 | proposed | `--ahead` / `--behind` in v1? |
+| ID  | Status   | Topic                                                                 |
+|-----|----------|-----------------------------------------------------------------------|
+| Q1  | proposed | v1 convenience flag set                                               |
+| Q2  | proposed | Combine semantics (AND vs OR vs XOR)                                  |
+| Q3  | proposed | Filter grain: project overall vs replica rows                         |
+| Q4  | proposed | `--status=` timing / share tag DSL                                    |
+| Q5  | proposed | Cross-project replica listing CLI shape                               |
+| Q6  | proposed | Color: auto TTY, palette, deps, `--color`                             |
+| Q7  | proposed | `--presence-only` vs change filters                                   |
+| Q8  | proposed | Empty match, preamble, structured output                              |
+| Q9  | proposed | `--present` / `--missing` on **project** overall (all-present vs any) |
+| Q10 | proposed | `--ahead` / `--behind` in v1?                                         |
 
 ## Locked
 
@@ -38,7 +38,7 @@ Change also has `untracked`, `ahead:N`, `behind:N`, `no-upstream`, `error`.
 Overall presence also has `partial`, `invalid`, `none`.
 
 ### Answer
-<!-- operator writes here -->
+
 Proposed: `--present --missing --invalid --partial --dirty --clean --untracked`.
 Hold `--ahead --behind --error --none` for `--status=` or a follow-on.
 
@@ -59,11 +59,15 @@ Later `--status='dirty AND present'` implies AND is the expression default.
 `--dirty --clean` is a contradiction at replica grain.
 
 ### Answer
-<!-- operator writes here -->
-Proposed: **AND** across flags. Contradiction → empty list, not an error.
-OR only via later `--status=`. Convenience flags XOR with `--status=` when
-that flag exists. Catalog `--tag` / `--domain` remain orthogonal (apply
-first, then status filter).
+
+**AND** across flags.
+Empty list is not an error.
+
+OR only via later `--status=`.
+Convenience flags XOR with `--status=` when that flag exists.
+
+Catalog `--tag` / `--domain` remain get ANDed to this set.
+Later you can write a selection expression that includes these as well.
 
 ### Notes
 —
@@ -79,12 +83,10 @@ On each invocation, what is filtered?
 
 ### Context
 Project table uses **overall** rollup (union of problem change tokens;
-presence `all-present|partial|missing|…`). Replica table uses per-checkout
-presence + change bag.
+presence `all-present|partial|missing|…`).
+Replica table uses per-checkout presence + change bag.
 
 ### Answer
-<!-- operator writes here -->
-Proposed:
 
 - `yerk status` → filter **project** rows by overall atoms.
 - `yerk status --replicas` → filter **replica** rows.
@@ -110,10 +112,7 @@ system as tags. Example: `--status='dirty AND present'` (typo `diry` in the
 request).
 
 ### Answer
-<!-- operator writes here -->
-Proposed: **defer implementation**. ADR here names the flag and atoms, forbids
-a stub, and requires sharing the tag-select engine once that ADR accepts.
-This plan ships convenience flags only.
+Completely defer.
 
 ### Notes
 Do not grow an ad-hoc status parser that later conflicts with the tag DSL.
@@ -133,11 +132,10 @@ on disk, not cataloged as first-class rows (except default included even if
 missing).
 
 ### Answer
-<!-- operator writes here -->
-Proposed: **`yerk status --replicas`** flattens selected projects into the
-existing replica table. Same `--tag` / `--domain` / names selection as
-status. Error if combined with a replica argument. Optional `yerk replica
-list` alias: **no** unless operator wants the noun.
+
+**`yerk status --replicas`** flattens selected projects into the existing replica table.
+Same `--tag` / `--domain` / names selection as status.
+No error if combined with a replica argument just show that one replica.
 
 ### Notes
 Preserves “project table is the default view” (domain spine).
@@ -152,15 +150,16 @@ Status: proposed
 When to color, which tokens, which dependency, which flag?
 
 ### Context
-Module deps today: cobra + toml only. `text/tabwriter` breaks if ANSI is
-counted as width. json/yaml must stay plain (ADR 019). gita colors remote
-*situation*; yerk should color **words**.
+Module deps today:
+cobra + toml only.
+`text/tabwriter` breaks if ANSI is counted as width.
+json/yaml must stay plain (ADR 019).
+gita colors remote *situation*;
+yerk should color **words**.
 
 ### Answer
-<!-- operator writes here -->
-Proposed: no new deps; auto color on TTY unless `NO_COLOR`; `--color=auto|always|never`;
-color presence/change **tokens** (palette in plan.md); never color structured
-output; pad then wrap so columns stay aligned.
+
+Just defer. Don't want to make this decision yet. This should be it's own plan not in this plan.
 
 ### Notes
 Palette can be tweaked in ADR without a new Q if operator prefers different
@@ -176,12 +175,12 @@ Status: proposed
 What if `--presence-only --dirty`?
 
 ### Context
-Change column is `-` when probes are skipped. Matching `--dirty` would
-silently match nothing.
+Change column is `-` when probes are skipped.
+Matching `--dirty` would silently match nothing.
 
 ### Answer
-<!-- operator writes here -->
-Proposed: **error** if any change atom flag is set together with
+
+**error** if any change atom flag is set together with
 `--presence-only`. Presence flags (`--present` / `--missing` / …) remain
 valid.
 

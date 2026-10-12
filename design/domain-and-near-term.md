@@ -35,7 +35,7 @@ It speaks PRJX vocabulary; it does not redefine the PRJX spec.
 | **Replica distinguisher** | Token separating replicas of the same project (often default branch short name). |
 | **Change status** | Observed git dirtiness / sync flags for a replica. |
 | **Presence status** | Whether the expected replica path is missing, present, or invalid on disk. |
-| **Local (config)** | Host/replica-only files staged into a checkout (PRJX `.local` / RFC 26). Named for later; out of near-term behavior. |
+| **Local (config)** | Host/replica-only files staged into a checkout (PRJX `.local` / RFC 26), plus host-only git config (e.g. LFS skip-smudge). Named for later; out of near-term behavior. See plan `host-local-staging`. |
 
 ### Avoid conflating
 
@@ -65,7 +65,7 @@ It speaks PRJX vocabulary; it does not redefine the PRJX spec.
 | Explain placement | resolve config | `yerk config resolve <project-id>` (contribution stack; ADR 013) |
 | Agent context dump | context | `yerk context`; `yerk context dir [path]` (ADR 017) |
 | Sync | pull / push | later — **design semantics first** (no stub CLI) |
-| Apply host-local files | stage locals | later |
+| Apply host-local files | stage locals | later (files + git-config such as LFS skip-smudge; plan `host-local-staging`) |
 
 Materialize **workspace** (`yerk workspace ensure`) and materialize **replica**
 (`yerk materialize`) are always separate steps in the model. Session spin-out
