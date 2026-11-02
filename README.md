@@ -43,6 +43,7 @@ Releases are signed with GitHub Actions identity via [packslip](https://packslip
 
 GitHub [Releases](https://github.com/salotz/yerk/releases) ship `yerk-<B.R.G>-linux-x64.tar.gz` (and a bare `.bin`),
 plus `packslip.sigstore.json`.
+Notable changes: [CHANGELOG.md](./CHANGELOG.md).
 
 ## Configure
 

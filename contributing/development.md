@@ -96,9 +96,10 @@ Go pin in workflows must match `mise.toml` (`1.27.1`). Bump both together.
 ### Release cut (tag → assets → packslip)
 
 1. Clean tree on the commit you want to ship; `mise run check`.
-2. `mise run version-bump -- growth --tag` (or `regression` / `breakage`).
-3. `git push origin main` (if needed) and `git push origin vB.R.G`.
-4. Workflow **release**:
+2. Move `[Unreleased]` notes in [CHANGELOG.md](../CHANGELOG.md) into a `## [B.R.G] - YYYY-MM-DD` section (RFC 002: Improvements / Breakages / Regressions).
+3. `mise run version-bump -- growth --tag` (or `regression` / `breakage`).
+4. `git push origin main` (if needed) and `git push origin vB.R.G`.
+5. Workflow **release**:
    - Builds `yerk-<ver>-linux-x64` (CGO off), packs `yerk-<ver>-linux-x64.tar.gz`
      (archive member `yerk`), writes `SHA256SUMS`.
    - Creates/updates the GitHub Release with those assets.
@@ -106,7 +107,7 @@ Go pin in workflows must match `mise.toml` (`1.27.1`). Bump both together.
      **tarball only** (`bin: yerk`, project `github.com/salotz/yerk`), attests
      files, signs with the workflow OIDC identity, uploads
      `packslip.sigstore.json`.
-5. **After the first successful release**, download the bundle and record the
+6. **After the first successful release**, download the bundle and record the
    signer pin for install docs / README:
 
    ```sh
@@ -114,7 +115,7 @@ Go pin in workflows must match `mise.toml` (`1.27.1`). Bump both together.
    packslip pin packslip.sigstore.json   # → ps1_… ; publish beside install instructions
    ```
 
-6. Operators install with mise:
+7. Operators install with mise:
 
    ```sh
    mise use -g packslip:github.com/salotz/yerk
