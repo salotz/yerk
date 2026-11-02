@@ -71,7 +71,8 @@ by missing semantics when they want the reference.
   **not** already in the registry (forward-compatible / stray knobs).
 - Do not resolve effective config paths here (that is `yerk config path` /
   `catalog path`); this command is the raw environment view.
-- Optional later: `--unset-only`, machine-readable formats, filter by scope.
+- Optional later: `--unset-only`, filter by scope.
+- Machine-readable: `--output json|yaml` (ADR 019) emits an `EnvVars` resource; `--output table` is the human table.
 
 ### Explicit non-goals (cobra-aware)
 

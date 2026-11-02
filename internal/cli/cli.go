@@ -105,14 +105,21 @@ func withEnv(long, commandPath string) string {
 }
 
 func newEnvvarsCmd(streams IO) *cobra.Command {
+	var output string
 	// Long = documentation (yerk help envvars / yerk envvars --help).
 	// Run = live process values (app-scoped env table). ADR 005.
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "envvars",
 		Short: "Print yerk-relevant environment variable values for this process",
 		Long:  envvars.FormatFullReference(),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateOutputFlag(output); err != nil {
+				return err
+			}
+			if isStructuredOutput(output) {
+				return writeStructured(streams.Out, output, envVarsResource(envvars.CollectLiveValues(nil, os.Environ())))
+			}
 			text := envvars.FormatLiveValues(nil, os.Environ())
 			if !strings.HasSuffix(text, "\n") {
 				text += "\n"
@@ -121,6 +128,26 @@ func newEnvvarsCmd(streams IO) *cobra.Command {
 			return err
 		},
 	}
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json|yaml|table (default: human table)")
+	return cmd
+}
+
+func envVarsResource(rows []envvars.LiveValue) api.EnvVars {
+	out := api.NewEnvVars()
+	if len(rows) == 0 {
+		out.Vars = []api.EnvVarValue{}
+		return out
+	}
+	out.Vars = make([]api.EnvVarValue, 0, len(rows))
+	for _, r := range rows {
+		out.Vars = append(out.Vars, api.EnvVarValue{
+			Name:  r.Name,
+			Value: r.Value,
+			Set:   r.Set,
+			Extra: r.Extra,
+		})
+	}
+	return out
 }
 
 func newVersionCmd(streams IO) *cobra.Command {
@@ -1280,87 +1307,111 @@ subcommand).`, "config"),
 			return err
 		},
 	})
-	root.AddCommand(&cobra.Command{
+	root.AddCommand(newConfigShowCmd(streams))
+	root.AddCommand(newConfigResolveCmd(streams))
+	return root
+}
+
+func newConfigShowCmd(streams IO) *cobra.Command {
+	var output string
+	cmd := &cobra.Command{
 		Use:   "show",
 		Short: "Load and summarize the active tool config",
-		Long:  withEnv("Load config.toml (and env overlays) and print a short summary.", "config show"),
-		Args:  cobra.NoArgs,
+		Long: withEnv(`Load config.toml (and env overlays) and print a short summary.
+
+Default output is human key/value text. Pass --output json|yaml for a single
+api resource (ToolConfig, apiVersion yerk/v1); --output table keeps human layout.
+
+Host-global only. Per-project placement stack: yerk config resolve <project-id>.`, "config show"),
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateOutputFlag(output); err != nil {
+				return err
+			}
 			cfg, err := config.Load()
 			if err != nil {
 				return err
 			}
-			path, _ := config.FilePath()
-			fmt.Fprintf(streams.Out, "file: %s\n", path)
-			fmt.Fprintf(streams.Out, "workspace.style: %s\n", cfg.Workspace.Style)
-			if len(cfg.Domains) == 0 {
-				fmt.Fprintln(streams.Out, "domains: (none)")
-			} else {
-				fmt.Fprintln(streams.Out, "domains:")
-				names := make([]string, 0, len(cfg.Domains))
-				for d := range cfg.Domains {
-					names = append(names, d)
-				}
-				sort.Strings(names)
-				for _, d := range names {
-					raw := cfg.Domains[d]
-					abs, err := config.ExpandUser(strings.TrimSpace(raw))
-					if err != nil {
-						fmt.Fprintf(streams.Out, "  %s: %s (expand error: %v)\n", d, raw, err)
-						continue
-					}
-					if abs != raw {
-						fmt.Fprintf(streams.Out, "  %s: %s → %s\n", d, raw, abs)
-					} else {
-						fmt.Fprintf(streams.Out, "  %s: %s\n", d, raw)
-					}
-				}
+			if isStructuredOutput(output) {
+				path, _ := config.FilePath()
+				stateDir, _ := stateDirOrNote()
+				return writeStructured(streams.Out, output, api.ToolConfigFromConfig(cfg, path, stateDir))
 			}
-			if len(cfg.Projects) == 0 {
-				fmt.Fprintln(streams.Out, "projects: (none)")
-			} else {
-				fmt.Fprintln(streams.Out, "projects:")
-				// stable order by bare id
-				type row struct{ id, path, style string }
-				rows := make([]row, 0, len(cfg.Projects))
-				for _, hp := range cfg.Projects {
-					rows = append(rows, row{id: hp.ID(), path: hp.Path, style: hp.WorkspaceStyle})
-				}
-				sort.Slice(rows, func(i, j int) bool { return rows[i].id < rows[j].id })
-				for _, r := range rows {
-					extra := ""
-					if s := strings.TrimSpace(r.style); s != "" {
-						extra = " style=" + s
-					}
-					raw := strings.TrimSpace(r.path)
-					if raw == "" {
-						fmt.Fprintf(streams.Out, "  %s: (default <domain-root>/<name>)%s\n", r.id, extra)
-						continue
-					}
-					abs, err := config.ExpandUser(raw)
-					if err != nil {
-						fmt.Fprintf(streams.Out, "  %s: %s (expand error: %v)%s\n", r.id, r.path, err, extra)
-						continue
-					}
-					if abs != raw {
-						fmt.Fprintf(streams.Out, "  %s: %s → %s%s\n", r.id, r.path, abs, extra)
-					} else {
-						fmt.Fprintf(streams.Out, "  %s: %s%s\n", r.id, r.path, extra)
-					}
-				}
-			}
-			fmt.Fprintln(streams.Out, "placement: [domains] default <root>/<name> or [[projects]] path (ADR 014); style from placement layers (ADR 013)")
-			stateDir, err := stateDirOrNote()
-			if err != nil {
-				fmt.Fprintf(streams.Out, "state.dir: (%v)\n", err)
-			} else {
-				fmt.Fprintf(streams.Out, "state.dir: %s\n", stateDir)
-			}
-			return nil
+			return printConfigShow(streams.Out, cfg)
 		},
-	})
-	root.AddCommand(newConfigResolveCmd(streams))
-	return root
+	}
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json|yaml|table (default: human text)")
+	return cmd
+}
+
+func printConfigShow(w io.Writer, cfg config.Config) error {
+	path, _ := config.FilePath()
+	fmt.Fprintf(w, "file: %s\n", path)
+	fmt.Fprintf(w, "workspace.style: %s\n", cfg.Workspace.Style)
+	if len(cfg.Domains) == 0 {
+		fmt.Fprintln(w, "domains: (none)")
+	} else {
+		fmt.Fprintln(w, "domains:")
+		names := make([]string, 0, len(cfg.Domains))
+		for d := range cfg.Domains {
+			names = append(names, d)
+		}
+		sort.Strings(names)
+		for _, d := range names {
+			raw := cfg.Domains[d]
+			abs, err := config.ExpandUser(strings.TrimSpace(raw))
+			if err != nil {
+				fmt.Fprintf(w, "  %s: %s (expand error: %v)\n", d, raw, err)
+				continue
+			}
+			if abs != raw {
+				fmt.Fprintf(w, "  %s: %s → %s\n", d, raw, abs)
+			} else {
+				fmt.Fprintf(w, "  %s: %s\n", d, raw)
+			}
+		}
+	}
+	if len(cfg.Projects) == 0 {
+		fmt.Fprintln(w, "projects: (none)")
+	} else {
+		fmt.Fprintln(w, "projects:")
+		// stable order by bare id
+		type row struct{ id, path, style string }
+		rows := make([]row, 0, len(cfg.Projects))
+		for _, hp := range cfg.Projects {
+			rows = append(rows, row{id: hp.ID(), path: hp.Path, style: hp.WorkspaceStyle})
+		}
+		sort.Slice(rows, func(i, j int) bool { return rows[i].id < rows[j].id })
+		for _, r := range rows {
+			extra := ""
+			if s := strings.TrimSpace(r.style); s != "" {
+				extra = " style=" + s
+			}
+			raw := strings.TrimSpace(r.path)
+			if raw == "" {
+				fmt.Fprintf(w, "  %s: (default <domain-root>/<name>)%s\n", r.id, extra)
+				continue
+			}
+			abs, err := config.ExpandUser(raw)
+			if err != nil {
+				fmt.Fprintf(w, "  %s: %s (expand error: %v)%s\n", r.id, r.path, err, extra)
+				continue
+			}
+			if abs != raw {
+				fmt.Fprintf(w, "  %s: %s → %s%s\n", r.id, r.path, abs, extra)
+			} else {
+				fmt.Fprintf(w, "  %s: %s%s\n", r.id, r.path, extra)
+			}
+		}
+	}
+	fmt.Fprintln(w, "placement: [domains] default <root>/<name> or [[projects]] path (ADR 014); style from placement layers (ADR 013)")
+	stateDir, err := stateDirOrNote()
+	if err != nil {
+		fmt.Fprintf(w, "state.dir: (%v)\n", err)
+	} else {
+		fmt.Fprintf(w, "state.dir: %s\n", stateDir)
+	}
+	return nil
 }
 
 func newContextCmd(streams IO) *cobra.Command {
@@ -1399,7 +1450,7 @@ See docs/how-to/agent-context.md.`, "context"),
 
 func newContextDirCmd(streams IO) *cobra.Command {
 	var (
-		output string
+		output  string
 		withGit bool
 	)
 	cmd := &cobra.Command{
@@ -1639,7 +1690,13 @@ subcommand).`, "catalog"),
 			return err
 		},
 	})
-	root.AddCommand(&cobra.Command{
+	root.AddCommand(newCatalogShowCmd(streams))
+	return root
+}
+
+func newCatalogShowCmd(streams IO) *cobra.Command {
+	var output string
+	cmd := &cobra.Command{
 		Use:   "show",
 		Short: "Print catalog projects as a table",
 		Long: withEnv(`Load catalog.toml and print registered projects as a table.
@@ -1647,40 +1704,54 @@ subcommand).`, "catalog"),
 Prints the declared tag vocabulary, then columns:
 NAME, DOMAIN, DEFAULT_REPLICA, TAGS, REMOTE.
 Workspace paths are host-local (config.toml [domains] and/or [[projects]]; ADR 014).
-Project tags must be members of the top-level catalog tags list (ADR 010).`, "catalog show"),
+Project tags must be members of the top-level catalog tags list (ADR 010).
+
+Default output is a human table. Pass --output json|yaml for a single api
+resource (Catalog, apiVersion yerk/v1); --output table keeps the human layout.`, "catalog show"),
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateOutputFlag(output); err != nil {
+				return err
+			}
 			cat, err := config.LoadCatalog()
 			if err != nil {
 				return err
 			}
-			path, _ := config.CatalogPath()
-			fmt.Fprintf(streams.Out, "file: %s\n", path)
-			if len(cat.Tags) == 0 {
-				fmt.Fprintln(streams.Out, "tags: (none declared)")
-			} else {
-				fmt.Fprintf(streams.Out, "tags: %s\n", strings.Join(cat.Tags, ", "))
+			if isStructuredOutput(output) {
+				return writeStructured(streams.Out, output, api.CatalogFromConfig(cat))
 			}
-			if len(cat.Projects) == 0 {
-				fmt.Fprintln(streams.Out, "projects: 0")
-				return nil
-			}
-			fmt.Fprintf(streams.Out, "projects: %d\n", len(cat.Projects))
-			tw := tabwriter.NewWriter(streams.Out, 0, 4, 2, ' ', 0)
-			fmt.Fprintf(tw, "NAME\tDOMAIN\tDEFAULT_REPLICA\tTAGS\tREMOTE\n")
-			for _, p := range cat.Projects {
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
-					p.Name,
-					dash(p.Domain),
-					dash(p.DefaultReplica),
-					dash(strings.Join(p.Tags, ",")),
-					dash(p.Remote),
-				)
-			}
-			return tw.Flush()
+			return printCatalogShow(streams.Out, cat)
 		},
-	})
-	return root
+	}
+	cmd.Flags().StringVar(&output, "output", "", "Output format: json|yaml|table (default: human table)")
+	return cmd
+}
+
+func printCatalogShow(w io.Writer, cat config.Catalog) error {
+	path, _ := config.CatalogPath()
+	fmt.Fprintf(w, "file: %s\n", path)
+	if len(cat.Tags) == 0 {
+		fmt.Fprintln(w, "tags: (none declared)")
+	} else {
+		fmt.Fprintf(w, "tags: %s\n", strings.Join(cat.Tags, ", "))
+	}
+	if len(cat.Projects) == 0 {
+		fmt.Fprintln(w, "projects: 0")
+		return nil
+	}
+	fmt.Fprintf(w, "projects: %d\n", len(cat.Projects))
+	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	fmt.Fprintf(tw, "NAME\tDOMAIN\tDEFAULT_REPLICA\tTAGS\tREMOTE\n")
+	for _, p := range cat.Projects {
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
+			p.Name,
+			dash(p.Domain),
+			dash(p.DefaultReplica),
+			dash(strings.Join(p.Tags, ",")),
+			dash(p.Remote),
+		)
+	}
+	return tw.Flush()
 }
 
 func stateDirOrNote() (string, error) {

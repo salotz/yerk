@@ -408,6 +408,7 @@ func TestEnvvarsCommandLiveValues(t *testing.T) {
 	if strings.Contains(s, "Command-scoped") {
 		t.Fatalf("yerk envvars should print values, not full docs\n%s", s)
 	}
+
 }
 
 func TestHelpEnvvarsTopic(t *testing.T) {
@@ -1644,4 +1645,3 @@ tags = ["devel"]
 		t.Fatalf("ensure --domain out:\n%s", out.String())
 	}
 }
-

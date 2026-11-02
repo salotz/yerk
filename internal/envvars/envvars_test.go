@@ -181,6 +181,46 @@ func TestVersionHasNoToolEnv(t *testing.T) {
 	}
 }
 
+func TestCollectLiveValues(t *testing.T) {
+	t.Parallel()
+	lookup := func(name string) (string, bool) {
+		switch name {
+		case "YERK__CONFIG_DIR":
+			return "/tmp/yerk-test", true
+		case "PATH":
+			return "/usr/bin", true
+		default:
+			return "", false
+		}
+	}
+	environ := []string{
+		"YERK__CONFIG_DIR=/tmp/yerk-test",
+		"YERK__FUTURE_KNOB=1",
+		"PATH=/usr/bin",
+		"UNRELATED=x",
+	}
+	rows := envvars.CollectLiveValues(lookup, environ)
+	byName := make(map[string]envvars.LiveValue, len(rows))
+	for _, r := range rows {
+		byName[r.Name] = r
+	}
+	got := byName["YERK__CONFIG_DIR"]
+	if !got.Set || got.Value != "/tmp/yerk-test" || got.Extra {
+		t.Fatalf("CONFIG_DIR: %+v", got)
+	}
+	got = byName["YERK__CONFIG"]
+	if got.Set || got.Value != "" {
+		t.Fatalf("unset CONFIG: %+v", got)
+	}
+	got = byName["YERK__FUTURE_KNOB"]
+	if !got.Set || !got.Extra || got.Value != "1" {
+		t.Fatalf("extra: %+v", got)
+	}
+	if _, ok := byName["UNRELATED"]; ok {
+		t.Fatal("should not collect unrelated env")
+	}
+}
+
 func TestLiveValuesTable(t *testing.T) {
 	t.Parallel()
 	lookup := func(name string) (string, bool) {

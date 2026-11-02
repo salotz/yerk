@@ -61,6 +61,58 @@ func TestCatalogFromConfig(t *testing.T) {
 	}
 }
 
+func TestToolConfigFromConfig(t *testing.T) {
+	t.Parallel()
+	c := api.ToolConfigFromConfig(config.Config{
+		Workspace: config.Workspace{Style: "workspace-dir"},
+		Domains: map[string]string{
+			"work":     "/tmp/work",
+			"personal": "~/tree/personal",
+		},
+		Projects: []config.HostProject{
+			{Name: "yerk", Domain: "personal", Path: "~/tree/odd/yerk", WorkspaceStyle: "project-dir"},
+			{Name: "bimker", Domain: "personal", Style: config.StyleSpec{
+				Style:   "name-tags",
+				MainDir: "~/.bimker",
+			}},
+		},
+	}, "/tmp/config.toml", "/tmp/state")
+	if c.Kind != api.KindToolConfig || c.APIVersion != api.APIVersion {
+		t.Fatalf("type meta: %+v", c)
+	}
+	if c.File != "/tmp/config.toml" || c.StateDir != "/tmp/state" {
+		t.Fatalf("paths: %+v", c)
+	}
+	if c.Workspace.Style != "workspace-dir" {
+		t.Fatalf("workspace: %+v", c.Workspace)
+	}
+	if len(c.Domains) != 2 || c.Domains[0].Name != "personal" || c.Domains[1].Name != "work" {
+		t.Fatalf("domains order: %+v", c.Domains)
+	}
+	if c.Domains[0].Path != "~/tree/personal" || c.Domains[0].PathExpanded == "" {
+		t.Fatalf("personal domain expand: %+v", c.Domains[0])
+	}
+	if c.Domains[1].PathExpanded != "" {
+		t.Fatalf("absolute domain should omit pathExpanded: %+v", c.Domains[1])
+	}
+	if len(c.Projects) != 2 {
+		t.Fatalf("projects: %+v", c.Projects)
+	}
+	// Stable URI order: personal/bimker then personal/yerk
+	if c.Projects[0].Name != "bimker" || c.Projects[0].URI != "yerk://personal/bimker" {
+		t.Fatalf("project0: %+v", c.Projects[0])
+	}
+	if c.Projects[0].WorkspaceStyle != "name-tags" || c.Projects[0].Style == nil || c.Projects[0].Style.MainDir != "~/.bimker" {
+		t.Fatalf("bimker style params: %+v", c.Projects[0])
+	}
+	if c.Projects[1].Name != "yerk" || c.Projects[1].Path != "~/tree/odd/yerk" || c.Projects[1].PathExpanded == "" {
+		t.Fatalf("yerk path: %+v", c.Projects[1])
+	}
+	if c.Projects[1].WorkspaceStyle != "project-dir" || c.Projects[1].Style != nil {
+		t.Fatalf("yerk name-only style should omit style object: %+v", c.Projects[1])
+	}
+}
+
 func TestPresenceFrom(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

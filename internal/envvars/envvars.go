@@ -418,6 +418,7 @@ func FormatFullReference() string {
 	b.WriteString("This list is generated from the internal registry (single source of truth for CLI help).\n")
 	b.WriteString("Command --help shows a primary subset; this page is complete for yerk-owned/read names.\n")
 	b.WriteString("For current process values (app-scoped env), run: yerk envvars\n")
+	b.WriteString("Machine-readable: yerk envvars --output json|yaml (table is the human default).\n")
 	b.WriteString("\n")
 
 	b.WriteString("Global (affect host state / config load for many commands)\n")
@@ -496,22 +497,24 @@ func isPatternName(name string) bool {
 // LookupEnvFunc is like os.LookupEnv (value, wasSet).
 type LookupEnvFunc func(name string) (string, bool)
 
-// FormatLiveValues returns a NAME / VALUE table for the current process,
-// like a shell `env` limited to yerk-relevant keys.
+// LiveValue is one process environment entry for the live dump.
+type LiveValue struct {
+	Name  string
+	Value string
+	Set   bool
+	Extra bool // present in process env but not in the registry
+}
+
+// CollectLiveValues returns registry names plus extra YERK__ keys.
 //
 // lookup defaults to os.LookupEnv when nil. environ is scanned for extra
 // YERK__ keys not in the registry (pass os.Environ() in production).
-func FormatLiveValues(lookup LookupEnvFunc, environ []string) string {
+func CollectLiveValues(lookup LookupEnvFunc, environ []string) []LiveValue {
 	if lookup == nil {
 		lookup = os.LookupEnv
 	}
 
-	type row struct {
-		name  string
-		value string
-		extra bool // not in registry (prefix scan)
-	}
-	var rows []row
+	var rows []LiveValue
 	seen := make(map[string]struct{})
 
 	for _, v := range All() {
@@ -520,22 +523,29 @@ func FormatLiveValues(lookup LookupEnvFunc, environ []string) string {
 		}
 		seen[v.Name] = struct{}{}
 		val, ok := lookup(v.Name)
-		if !ok {
-			rows = append(rows, row{name: v.Name, value: "(unset)"})
-			continue
-		}
-		rows = append(rows, row{name: v.Name, value: val})
+		rows = append(rows, LiveValue{Name: v.Name, Value: val, Set: ok})
 	}
 
 	// Forward-compatible / stray knobs: take name+value from environ entries
 	// so test injects and process scans both work without a second lookup.
 	for _, name := range extraPrefixNames(environ, seen, "YERK__") {
-		rows = append(rows, row{
-			name:  name,
-			value: valueFromEnviron(environ, name),
-			extra: true,
+		rows = append(rows, LiveValue{
+			Name:  name,
+			Value: valueFromEnviron(environ, name),
+			Set:   true,
+			Extra: true,
 		})
 	}
+	return rows
+}
+
+// FormatLiveValues returns a NAME / VALUE table for the current process,
+// like a shell `env` limited to yerk-relevant keys.
+//
+// lookup defaults to os.LookupEnv when nil. environ is scanned for extra
+// YERK__ keys not in the registry (pass os.Environ() in production).
+func FormatLiveValues(lookup LookupEnvFunc, environ []string) string {
+	rows := CollectLiveValues(lookup, environ)
 
 	var b strings.Builder
 	b.WriteString("yerk-relevant environment (this process)\n")
@@ -548,11 +558,15 @@ func FormatLiveValues(lookup LookupEnvFunc, environ []string) string {
 	tw := tabwriter.NewWriter(&b, 0, 4, 2, ' ', 0)
 	fmt.Fprintf(tw, "NAME\tVALUE\n")
 	for _, r := range rows {
-		name := r.name
-		if r.extra {
-			name = r.name + " *"
+		name := r.Name
+		if r.Extra {
+			name = r.Name + " *"
 		}
-		fmt.Fprintf(tw, "%s\t%s\n", name, displayValue(r.value))
+		val := r.Value
+		if !r.Set {
+			val = "(unset)"
+		}
+		fmt.Fprintf(tw, "%s\t%s\n", name, displayValue(val))
 	}
 	_ = tw.Flush()
 	b.WriteString("\n")

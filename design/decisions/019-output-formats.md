@@ -54,11 +54,14 @@ Human status still prints preamble lines (`workspace.style=…`) only for non-st
 - YAML via `gopkg.in/yaml.v3` using the same structs (json names).
 - No separate “table schema”; `table` does not invent columns beyond the human printer.
 
+Human inspect dumps (`catalog show`, `config show`, `envvars`) print preamble lines (`file:`, table headers) only for non-structured output. Path printers (`path`, `config path`, `catalog path`) stay a single path line for shell composition. Mutation commands (`workspace ensure`, `materialize`, `replica create`, `state update`) stay human progress + path.
+
 ### Out of scope
 
 - JSON Schema / OpenAPI generation
 - Streaming / NDJSON lists
 - Changing default human status columns
+- `--output` on path printers or mutate commands
 
 ## Consequences
 

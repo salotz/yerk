@@ -1,6 +1,9 @@
 package api
 
 import (
+	"sort"
+	"strings"
+
 	"github.com/salotz/yerk/internal/config"
 	"github.com/salotz/yerk/internal/id"
 	"github.com/salotz/yerk/internal/presence"
@@ -32,6 +35,68 @@ func CatalogFromConfig(c config.Catalog) Catalog {
 		Tags:       copyStrings(c.Tags),
 		Projects:   projects,
 	}
+}
+
+// ToolConfigFromConfig maps loaded tool config plus resolved paths to ToolConfig.
+func ToolConfigFromConfig(c config.Config, file, stateDir string) ToolConfig {
+	out := NewToolConfig()
+	out.File = strings.TrimSpace(file)
+	out.Workspace = ToolConfigWorkspace{Style: strings.TrimSpace(c.Workspace.Style)}
+	out.StateDir = strings.TrimSpace(stateDir)
+
+	if len(c.Domains) > 0 {
+		names := make([]string, 0, len(c.Domains))
+		for d := range c.Domains {
+			names = append(names, d)
+		}
+		sort.Strings(names)
+		out.Domains = make([]ToolConfigDomain, 0, len(names))
+		for _, d := range names {
+			raw := strings.TrimSpace(c.Domains[d])
+			row := ToolConfigDomain{Name: d, Path: raw}
+			if abs, err := config.ExpandUser(raw); err == nil && abs != "" && abs != raw {
+				row.PathExpanded = abs
+			}
+			out.Domains = append(out.Domains, row)
+		}
+	}
+
+	if len(c.Projects) > 0 {
+		rows := make([]ToolConfigProject, 0, len(c.Projects))
+		for _, hp := range c.Projects {
+			row := ToolConfigProject{
+				Name:           strings.TrimSpace(hp.Name),
+				Domain:         strings.TrimSpace(hp.Domain),
+				Path:           strings.TrimSpace(hp.Path),
+				WorkspaceStyle: strings.TrimSpace(hp.WorkspaceStyle),
+			}
+			if row.Domain != "" && row.Name != "" {
+				row.URI = id.ProjectURI(row.Domain, row.Name)
+			}
+			if row.Path != "" {
+				if abs, err := config.ExpandUser(row.Path); err == nil && abs != "" && abs != row.Path {
+					row.PathExpanded = abs
+				}
+			}
+			if !hp.Style.IsZero() {
+				if row.WorkspaceStyle == "" {
+					row.WorkspaceStyle = hp.Style.Name()
+				}
+				if hp.Style.HasParams() {
+					spec := StyleSpec{
+						Style:      hp.Style.Name(),
+						MainDir:    strings.TrimSpace(hp.Style.MainDir),
+						ReplicaDir: strings.TrimSpace(hp.Style.ReplicaDir),
+					}
+					row.Style = &spec
+				}
+			}
+			rows = append(rows, row)
+		}
+		sort.Slice(rows, func(i, j int) bool { return rows[i].URI < rows[j].URI })
+		out.Projects = rows
+	}
+	return out
 }
 
 // PresenceFrom converts a presence classifier value to api.Presence.
@@ -88,6 +153,22 @@ func NewConfigResolve() ConfigResolve {
 	return ConfigResolve{
 		APIVersion: APIVersion,
 		Kind:       KindConfigResolve,
+	}
+}
+
+// NewToolConfig returns a ToolConfig with TypeMeta fields set.
+func NewToolConfig() ToolConfig {
+	return ToolConfig{
+		APIVersion: APIVersion,
+		Kind:       KindToolConfig,
+	}
+}
+
+// NewEnvVars returns an EnvVars resource with TypeMeta fields set.
+func NewEnvVars() EnvVars {
+	return EnvVars{
+		APIVersion: APIVersion,
+		Kind:       KindEnvVars,
 	}
 }
 

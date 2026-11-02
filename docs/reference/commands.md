@@ -18,18 +18,18 @@ a second full flag dump.
 
 | Command | Role | Notes |
 | --- | --- | --- |
-| `status` | Project or replica presence + change | multi-project: overall rollup; one project: all live replicas; one replica: single row; `--tag` / `--domain`; `--presence-only`; `--network` |
+| `status` | Project or replica presence + change | multi-project: overall rollup; one project: all live replicas; one replica: single row; `--tag` / `--domain`; `--presence-only`; `--network`; `--output json\|yaml\|table` |
 | `path` / `resolve` | Print workspace path, or replica path when distinguisher given | `path <id>` → workspace; `path <id> <replica>` or `id/replica` → checkout |
 | `workspace ensure` | Create project workspace dirs only | project ids, `--all`, `--tag`, or `--domain`; no replica leaf; no git |
 | `materialize` | Materialize replica(s) from remote via git | `materialize <id> [replica]` \| `--all` \| `--tag` \| `--domain`; optional `--replica`; already-present → ok; no `clone` alias |
 | `replica create` | Session spin-out (worktree \| clone method) | `replica create <id> <replica>`; `--method`; main required for worktree; refuse if dest present (ADR 016) |
-| `get` / `project\|replica get` | One-resource info by id | `--output json` (ADR 015) |
-| `lookup` / `project\|replica lookup` | Path → `yerk://` URI (default); full resource with `--output json` | ADR 015 |
-| `context` / `context dir` | Agent dumps (tool or directory) | `--output json`; compose lookup + placement + short status (ADR 017) |
-| `config` | Tool config path / show / resolve | `config resolve <project-id>` placement stack; `--output json`; samples in `examples/` |
+| `get` / `project\|replica get` | One-resource info by id | `--output json\|yaml\|table` (ADR 015/019) |
+| `lookup` / `project\|replica lookup` | Path → `yerk://` URI (default); full resource with `--output json\|yaml` | ADR 015/019 |
+| `context` / `context dir` | Agent dumps (tool or directory) | `--output json\|yaml\|table`; compose lookup + placement + short status (ADR 017) |
+| `config` | Tool config path / show / resolve | `config show` → `ToolConfig`; `config resolve <project-id>` → `ConfigResolve`; `--output json\|yaml\|table`; samples in `examples/` |
 | `state update` | Rebind host project state from ambient | project ids or `--all`; optional `--workspace-style`; creates or overwrites `state.json` |
-| `catalog` | Catalog path / show (table + declared tags) | samples in `examples/`; ADR 010 |
-| `envvars` | Live env values for this process | docs: `yerk help envvars` |
+| `catalog` | Catalog path / show (table + declared tags) | `catalog show --output json\|yaml\|table` → `Catalog`; samples in `examples/`; ADR 010 |
+| `envvars` | Live env values for this process | docs: `yerk help envvars`; `--output json\|yaml\|table` → `EnvVars` |
 | `version` | Print version identity | |
 
 ## See also

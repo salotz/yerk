@@ -12,8 +12,10 @@ const (
 	KindProjectInfo   = "ProjectInfo"
 	KindReplicaInfo   = "ReplicaInfo"
 	KindConfigResolve = "ConfigResolve"
+	KindToolConfig    = "ToolConfig"
 	KindToolContext   = "ToolContext"
 	KindDirContext    = "DirContext"
+	KindEnvVars       = "EnvVars"
 )
 
 // Presence is on-disk presence of an expected path (replica checkout or,
@@ -174,6 +176,74 @@ type ReplicaInfo struct {
 	Placement *PlacementInfo `json:"placement,omitempty"`
 	// MatchedPath is the absolute path that triggered lookup (lookup only).
 	MatchedPath string `json:"matchedPath,omitempty"`
+}
+
+// StyleSpec is workspace style name plus optional path parameters (ADR 018).
+// Product view of config.StyleSpec; not the TOML decoder.
+type StyleSpec struct {
+	Style      string `json:"style,omitempty"`
+	MainDir    string `json:"mainDir,omitempty"`
+	ReplicaDir string `json:"replicaDir,omitempty"`
+}
+
+// ToolConfig is the host/tool config dump for `config show` (ADR 019).
+// Distinct from ConfigResolve (per-project placement stack).
+type ToolConfig struct {
+	// APIVersion is the resource API version (yerk/v1).
+	APIVersion string `json:"apiVersion"`
+	// Kind is always KindToolConfig.
+	Kind string `json:"kind"`
+	// File is the resolved config.toml path.
+	File string `json:"file,omitempty"`
+	// Workspace is the host-default placement knobs.
+	Workspace ToolConfigWorkspace `json:"workspace"`
+	// Domains is the optional domain-name → root map (stable name order).
+	Domains []ToolConfigDomain `json:"domains,omitempty"`
+	// Projects is optional host-local placement rows (stable id order).
+	Projects []ToolConfigProject `json:"projects,omitempty"`
+	// StateDir is the resolved host state directory when known.
+	StateDir string `json:"stateDir,omitempty"`
+}
+
+// ToolConfigWorkspace holds ambient workspace knobs from config.toml.
+type ToolConfigWorkspace struct {
+	Style string `json:"style,omitempty"`
+}
+
+// ToolConfigDomain is one [domains] entry.
+type ToolConfigDomain struct {
+	Name         string `json:"name"`
+	Path         string `json:"path"`
+	PathExpanded string `json:"pathExpanded,omitempty"`
+}
+
+// ToolConfigProject is one host [[projects]] row (paths, not catalog identity).
+type ToolConfigProject struct {
+	Name           string     `json:"name"`
+	Domain         string     `json:"domain,omitempty"`
+	URI            string     `json:"uri,omitempty"`
+	Path           string     `json:"path,omitempty"`
+	PathExpanded   string     `json:"pathExpanded,omitempty"`
+	WorkspaceStyle string     `json:"workspaceStyle,omitempty"`
+	Style          *StyleSpec `json:"style,omitempty"`
+}
+
+// EnvVars is the live process environment dump for `yerk envvars` (ADR 005/019).
+type EnvVars struct {
+	// APIVersion is the resource API version (yerk/v1).
+	APIVersion string `json:"apiVersion"`
+	// Kind is always KindEnvVars.
+	Kind string `json:"kind"`
+	// Vars is registry names plus extra YERK__ keys present in the process.
+	Vars []EnvVarValue `json:"vars"`
+}
+
+// EnvVarValue is one live environment entry.
+type EnvVarValue struct {
+	Name  string `json:"name"`
+	Value string `json:"value,omitempty"`
+	Set   bool   `json:"set"`
+	Extra bool   `json:"extra,omitempty"`
 }
 
 // ConfigResolveContribution is one layer in a config resolve dump (ADR 015 follow-on / Phase 4).
