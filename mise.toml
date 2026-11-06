@@ -3,6 +3,8 @@
 
 [tools]
 go = "1.27.1"
+# Informal domain-model checker for design/models (not codegen).
+cue = "0.17.1"
 
 [env]
 # Keep module/build caches inside the gitignored .local tree (writable in sandboxes).
@@ -32,6 +34,16 @@ run = "mkdir -p .local/bin && go build -o .local/bin/yerk ./cmd/yerk"
 [tasks.install]
 description = "Build and place yerk on the mise-managed PATH (.local/bin)"
 depends = ["build"]
+
+[tasks."models:vet"]
+description = "Validate CUE domain models under design/models"
+dir = "design/models"
+run = "cue vet ./domain/v1alpha1"
+
+[tasks."models:fmt"]
+description = "Format CUE files under design/models"
+dir = "design/models"
+run = "cue fmt ./domain/v1alpha1"
 
 [tasks.test]
 description = "Run Go tests"

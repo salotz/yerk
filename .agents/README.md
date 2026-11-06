@@ -3,6 +3,7 @@
 Project-local agent context for `yerk` (salotz RFC 22 / RFC 23).
 
 - [context/](./context/): durable pointers and repo map (remote / portable)
+- [handoffs/](./handoffs/): session handoffs (e.g. CUE style → agent-guidelines)
 - [plans/](./plans/): ephemeral multi-session plans (operator work-process;
   owner folders e.g. [plans/salotz/](./plans/salotz/), index
   [plans/salotz/todo.md](./plans/salotz/todo.md))

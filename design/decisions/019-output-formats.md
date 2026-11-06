@@ -39,12 +39,12 @@ Unsupported values error. No TTY auto-json.
 
 ### Commands (this phase)
 
-| Command | Structured payload |
-| --- | --- |
-| `get` / `lookup` / noun get\|lookup | `ProjectInfo` or `ReplicaInfo` |
-| `context` / `context dir` | `ToolContext` / `DirContext` |
-| `config resolve` | `ConfigResolve` |
-| `status` | single project → `ProjectStatus`; single replica → `ReplicaStatus`; multi → JSON/YAML **array** of `ProjectStatus` |
+| Command                             | Structured payload                                                                                                 |
+|-------------------------------------|--------------------------------------------------------------------------------------------------------------------|
+| `get` / `lookup` / noun get\|lookup | `ProjectInfo` or `ReplicaInfo`                                                                                     |
+| `context` / `context dir`           | `ToolContext` / `DirContext`                                                                                       |
+| `config resolve`                    | `ConfigResolve`                                                                                                    |
+| `status`                            | single project → `ProjectStatus`; single replica → `ReplicaStatus`; multi → JSON/YAML **array** of `ProjectStatus` |
 
 Human status still prints preamble lines (`workspace.style=…`) only for non-structured output.
 

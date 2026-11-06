@@ -19,6 +19,7 @@ mise run preload
 
 `preload` downloads Go module dependencies.
 Go itself is pinned in `mise.toml`.
+CUE (`0.17.1`) is pinned for `design/models` only (`mise run models:vet`).
 
 Module and build caches are directed under `.local/` (gitignored) so sandboxed
 or multi-clone work does not need a writable global `GOPATH`.
@@ -131,6 +132,8 @@ a consumer trust reset (packslip pins the **workflow path**
 mise run test
 mise run check          # tests + go vet
 mise run fmt            # gofmt -w
+mise run models:vet     # CUE domain types under design/models
+mise run models:fmt
 ```
 
 ## Config while developing

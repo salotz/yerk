@@ -21,21 +21,21 @@ It speaks PRJX vocabulary; it does not redefine the PRJX spec.
 
 ## Nouns
 
-| Noun | Meaning |
-| --- | --- |
-| **Project** | Named unit of software work managed on this host. Catalog identity is required `domain` + `name` (bare id `domain/name`, URI `yerk://…`; ADR 012). MVP assumes one primary **remote**; multi-remote is allowed later. |
-| **Catalog** | Host-global registry of projects (`catalog.toml`). Source of truth for *what* exists. |
-| **Config (tool)** | Host/tool behavior (`config.toml`): workspace **style**, optional **`[domains]`** roots, optional host **`[[projects]]`** rows (path overrides, later knobs). Source of truth for *how on this host*. May differ per machine. |
-| **Remote** | Clone URI (git URL or path) for the project’s canonical VCS content. |
-| **Domain** | Logical namespace on a project (e.g. `personal`). Required for ids/URIs (ADR 012). Optional host `[domains]` root is a convenience default, not identity (ADR 014). |
-| **Tag** | Declared bulk-select label. Catalog root `tags = […]` is a **closed vocabulary**; each project’s `tags` must be members (ADR 010). Orthogonal to domain. |
-| **Project workspace** | On-disk directory that **owns** a project's replicas. Default `<domains[domain]>/<name>` or host `[[projects]]` path (ADR 014). Not a git checkout. |
-| **Workspace (policy)** | How replicas are placed relative to each project workspace (`style`). Effective style merges host / dir-local / catalog / **host state** / env / CLI (ADR 013). |
-| **Replica** | One concrete on-disk checkout of a project on this host (PRJX), e.g. `…/yerk/main`. |
-| **Replica distinguisher** | Token separating replicas of the same project (often default branch short name). |
-| **Change status** | Observed git dirtiness / sync flags for a replica. |
-| **Presence status** | Whether the expected replica path is missing, present, or invalid on disk. |
-| **Local (config)** | Host/replica-only files staged into a checkout (PRJX `.local` / RFC 26), plus host-only git config (e.g. LFS skip-smudge). Named for later; out of near-term behavior. See plan `host-local-staging`. |
+| Noun                      | Meaning                                                                                                                                                                                                                       |
+|---------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Project**               | Named unit of software work managed on this host. Catalog identity is required `domain` + `name` (bare id `domain/name`, URI `yerk://…`; ADR 012). MVP assumes one primary **remote**; multi-remote is allowed later.         |
+| **Catalog**               | Host-global registry of projects (`catalog.toml`). Source of truth for *what* exists.                                                                                                                                         |
+| **Config (tool)**         | Host/tool behavior (`config.toml`): workspace **style**, optional **`[domains]`** roots, optional host **`[[projects]]`** rows (path overrides, later knobs). Source of truth for *how on this host*. May differ per machine. |
+| **Remote**                | Clone URI (git URL or path) for the project’s canonical VCS content.                                                                                                                                                          |
+| **Domain**                | Logical namespace on a project (e.g. `personal`). Required for ids/URIs (ADR 012). Optional host `[domains]` root is a convenience default, not identity (ADR 014).                                                           |
+| **Tag**                   | Declared bulk-select label. Catalog root `tags = […]` is a **closed vocabulary**; each project’s `tags` must be members (ADR 010). Orthogonal to domain.                                                                      |
+| **Project workspace**     | On-disk directory that **owns** a project's replicas. Default `<domains[domain]>/<name>` or host `[[projects]]` path (ADR 014). Not a git checkout.                                                                           |
+| **Workspace (policy)**    | How replicas are placed relative to each project workspace (`style`). Effective style merges host / dir-local / catalog / **host state** / env / CLI (ADR 013).                                                               |
+| **Replica**               | One concrete on-disk checkout of a project on this host (PRJX), e.g. `…/yerk/main`.                                                                                                                                           |
+| **Replica distinguisher** | Token separating replicas of the same project (often default branch short name).                                                                                                                                              |
+| **Change status**         | Observed git dirtiness / sync flags for a replica.                                                                                                                                                                            |
+| **Presence status**       | Whether the expected replica path is missing, present, or invalid on disk.                                                                                                                                                    |
+| **Local (config)**        | Host/replica-only files staged into a checkout (PRJX `.local` / RFC 26), plus host-only git config (e.g. LFS skip-smudge). Named for later; out of near-term behavior. See plan `host-local-staging`.                         |
 
 ### Avoid conflating
 

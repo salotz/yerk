@@ -30,6 +30,8 @@ stage host-local configuration. Speaks PRJX vocabulary.
 - [`.appinfo/meta.toml`](./.appinfo/meta.toml): application info + env registry (RFC 030/031)
 - [design/goals.md](./design/goals.md): product goals from the idea note
 - [design/decisions/](./design/decisions/): ADRs
+- [design/models/](./design/models/): CUE domain types (`salotz.info/yerk/domspec`)
+- [design/external/domspec/](./design/external/domspec/): nested modelling-toolkit prototype (extract later)
 - [contributing/development.md](./contributing/development.md): bootstrap → build → test
 - [`examples/`](./examples/): portable config/catalog samples (ADR 007)
 - [`.agents/`](./.agents/): plans and context
@@ -44,6 +46,7 @@ mise install && mise run preload
 mise run build
 mise run test
 mise run check
+mise run models:vet
 ```
 
 Prefer `mise run` / `mise exec` so pins and `.local` Go caches apply without
